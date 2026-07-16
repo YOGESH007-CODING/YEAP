@@ -1,0 +1,101 @@
+// Prisma Schema — YEAP SRS Backend
+// Rule: dueDate is indexed for O(log n) queue compilation queries.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User Model ─────────────────────────────────────────────────────────────
+model User {
+  id                String            @id @default(cuid())
+  email             String            @unique
+  name              String?
+  passwordHash      String?                       // Null for Google-only users
+  googleId          String?           @unique
+  leetcodeUsername  String?           @unique   // Optional — verified post-OAuth
+  telegramChatId    String?                     // For Telegram notification delivery
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  // Relations
+  problemProgresses ProblemProgress[]
+  refreshTokens     RefreshToken[]
+
+  @@map("users")
+}
+
+// ─── Problem Model ───────────────────────────────────────────────────────────
+model Problem {
+  id          String            @id @default(cuid())
+  slug        String            @unique     // LeetCode URL slug e.g. "two-sum"
+  title       String
+  difficulty  Difficulty
+  topicTags   String[]                      // e.g. ["Array", "Hash Table"]
+  companyTags String[]                      // e.g. ["Amazon", "Google"]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Relations
+  progresses  ProblemProgress[]
+
+  @@index([companyTags], type: Gin)
+  @@index([topicTags], type: Gin)
+  @@map("problems")
+}
+
+// ─── ProblemProgress Model (SM-2 State per User per Problem) ─────────────────
+model ProblemProgress {
+  id              String    @id @default(cuid())
+  userId          String
+  problemId       String
+
+  // SM-2 State
+  repetitions     Int       @default(0)           // n: number of successful reviews
+  easinessFactor  Float     @default(2.5)          // EF: starts at 2.5 per SM-2 spec
+  intervalDays    Int       @default(1)            // I: days until next review
+  dueDate         DateTime  @default(now())        // Next scheduled review datetime
+
+  // Audit
+  lastReviewedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  // Constraints
+  @@unique([userId, problemId])           // One progress record per user per problem
+  @@index([dueDate])                      // Fast backlog queue compilation queries
+  @@index([userId, dueDate])              // Compound index for per-user due queries
+  @@map("problem_progresses")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+// ─── RefreshToken Model ──────────────────────────────────────────────────────
+model RefreshToken {
+  id         String   @id @default(cuid())
+  token      String   @unique             // The opaque refresh token string
+  userId     String
+  expiresAt  DateTime                     // 30-day expiry
+  revoked    Boolean  @default(false)     // For manual revocation (logout)
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])                    // For cleanup of expired tokens
+  @@map("refresh_tokens")
+}
