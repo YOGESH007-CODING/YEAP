@@ -264,13 +264,11 @@ async function main(): Promise<void> {
     await cleanup(userId, createdProblemIds);
     await db.$disconnect();
 
-    console.log('═══════════════════════════════════════════════════════════');
     if (failed === 0) {
       console.log(`    ALL ${passed} ASSERTIONS PASSED`);
     } else {
       console.log(`  RESULTS: ${passed} passed  /  ${failed} FAILED`);
     }
-    console.log('═══════════════════════════════════════════════════════════\n');
 
     if (failed > 0) process.exit(1);
   }

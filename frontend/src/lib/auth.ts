@@ -31,3 +31,8 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 export const useAuth = () => useContext(AuthContext);
+
+export function generateDevToken(id: string, email: string): string {
+  const payload = { id, email, role: 'developer' };
+  return `dev_${btoa(JSON.stringify(payload))}`;
+}

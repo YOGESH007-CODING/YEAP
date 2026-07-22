@@ -7,20 +7,20 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export function Input({ label, className = '', id, ...props }: InputProps) {
   const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       {label && (
-        <label htmlFor={inputId} className="font-data text-[10px] font-medium uppercase tracking-widest text-[#737373]">
+        <label htmlFor={inputId} className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98]">
           {label}
         </label>
       )}
       <input
         id={inputId}
         className={`
-          font-data border-b-2 border-[#111] bg-transparent
-          px-1 py-2 text-sm text-[#111]
-          placeholder:text-[#A3A3A3]
-          focus:bg-[#F0F0F0] focus:outline-none
-          transition-colors duration-200
+          bg-[#0F0F12] border border-white/10 rounded-lg
+          px-3 py-2.5 text-sm text-[#EDEDEF]
+          placeholder:text-gray-500
+          focus:border-[#5E6AD2] focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)] focus:outline-none
+          transition-all duration-200
           ${className}
         `}
         {...props}

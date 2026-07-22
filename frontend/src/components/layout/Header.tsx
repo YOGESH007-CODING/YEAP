@@ -14,85 +14,61 @@ export function Header() {
   const { signOut } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const today = new Date();
-  const formatted = today.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-
   return (
-    <header className="sticky top-0 z-40 bg-[#F9F9F7] border-b-4 border-[#111]">
-      {/* Edition bar */}
-      <div className="border-b border-[#E5E5E0] px-4">
-        <div className="mx-auto max-w-screen-xl flex items-center justify-between py-1">
-          <span className="font-data text-[10px] uppercase tracking-widest text-[#737373]">
-            Vol. 1 &nbsp;|&nbsp; {formatted}
-          </span>
-          <span className="font-data text-[10px] uppercase tracking-widest text-[#737373]">
-            Spaced Repetition Edition
-          </span>
-        </div>
-      </div>
+    <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#050506]/80 backdrop-blur-xl">
+      <div className="mx-auto max-w-screen-xl flex items-center justify-between px-4 h-14">
+        {/* Logo */}
+        <Link to="/dashboard" className="text-lg font-semibold tracking-tight text-[#EDEDEF] no-underline flex items-center gap-2">
+          <span className="inline-block w-6 h-6 rounded-lg bg-[#5E6AD2] shadow-[0_0_12px_rgba(94,106,210,0.4)]" />
+          YEAP
+        </Link>
 
-      {/* Main header */}
-      <div className="px-4">
-        <div className="mx-auto max-w-screen-xl flex items-center justify-between py-3">
-          {/* Masthead */}
-          <Link to="/dashboard" className="font-display text-3xl lg:text-4xl font-black tracking-tight text-[#111] no-underline">
-            YEAP
-          </Link>
-
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
-            {navLinks.map(({ to, label }) => (
-              <Link
-                key={to}
-                to={to}
-                className={`
-                  font-ui text-xs font-semibold uppercase tracking-widest
-                  px-4 py-2 transition-colors duration-200 no-underline
-                  ${pathname === to
-                    ? 'bg-[#111] text-[#F9F9F7]'
-                    : 'text-[#111] hover:text-[#CC0000]'
-                  }
-                `}
-              >
-                {label}
-              </Link>
-            ))}
-            <button
-              onClick={signOut}
-              className="font-ui text-xs font-semibold uppercase tracking-widest px-4 py-2 text-[#737373] hover:text-[#CC0000] transition-colors cursor-pointer"
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-1">
+          {navLinks.map(({ to, label }) => (
+            <Link
+              key={to}
+              to={to}
+              className={`
+                text-sm font-medium px-3 py-1.5 rounded-lg transition-all duration-200 no-underline
+                ${pathname === to
+                  ? 'bg-white/[0.08] text-[#EDEDEF]'
+                  : 'text-[#8A8F98] hover:text-[#EDEDEF] hover:bg-white/[0.05]'
+                }
+              `}
             >
-              Sign Out
-            </button>
-          </nav>
-
-          {/* Mobile hamburger */}
+              {label}
+            </Link>
+          ))}
           <button
-            className="md:hidden p-2 min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
-            onClick={() => setMobileOpen(!mobileOpen)}
-            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            onClick={signOut}
+            className="text-sm font-medium px-3 py-1.5 rounded-lg text-[#8A8F98] hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 cursor-pointer ml-2"
           >
-            {mobileOpen ? <X size={24} strokeWidth={1.5} /> : <Menu size={24} strokeWidth={1.5} />}
+            Sign Out
           </button>
-        </div>
+        </nav>
+
+        {/* Mobile hamburger */}
+        <button
+          className="md:hidden p-2 text-[#8A8F98] hover:text-[#EDEDEF] cursor-pointer"
+          onClick={() => setMobileOpen(!mobileOpen)}
+          aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+        >
+          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
       </div>
 
       {/* Mobile nav */}
       {mobileOpen && (
-        <nav className="md:hidden border-t border-[#111] bg-[#F9F9F7]" aria-label="Mobile navigation">
+        <nav className="md:hidden border-t border-white/[0.06] bg-[#050506]/95 backdrop-blur-xl px-4 py-3 space-y-1">
           {navLinks.map(({ to, label }) => (
             <Link
               key={to}
               to={to}
               onClick={() => setMobileOpen(false)}
               className={`
-                block px-4 py-3 font-ui text-xs font-semibold uppercase tracking-widest
-                border-b border-[#E5E5E0] no-underline
-                ${pathname === to ? 'bg-[#111] text-[#F9F9F7]' : 'text-[#111]'}
+                block text-sm font-medium px-3 py-2 rounded-lg transition-all duration-200 no-underline
+                ${pathname === to ? 'bg-white/[0.08] text-[#EDEDEF]' : 'text-[#8A8F98]'}
               `}
             >
               {label}
@@ -100,7 +76,7 @@ export function Header() {
           ))}
           <button
             onClick={() => { signOut(); setMobileOpen(false); }}
-            className="block w-full text-left px-4 py-3 font-ui text-xs font-semibold uppercase tracking-widest text-[#737373] cursor-pointer"
+            className="block w-full text-left text-sm font-medium px-3 py-2 rounded-lg text-[#8A8F98] hover:text-red-400 cursor-pointer"
           >
             Sign Out
           </button>

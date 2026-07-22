@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'link' | 'danger';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -8,29 +8,26 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
 }
 
-const variantClasses: Record<Variant, string> = {
+const styles: Record<Variant, string> = {
   primary:
-    'bg-[#111] text-[#F9F9F7] border border-transparent hover:bg-[#F9F9F7] hover:text-[#111] hover:border-[#111]',
+    'bg-[#5E6AD2] text-white shadow-[0_0_0_1px_rgba(94,106,210,0.5),0_4px_12px_rgba(94,106,210,0.3),inset_0_1px_0_0_rgba(255,255,255,0.2)] hover:bg-[#6872D9] hover:shadow-[0_0_0_1px_rgba(94,106,210,0.6),0_8px_24px_rgba(94,106,210,0.4),inset_0_1px_0_0_rgba(255,255,255,0.2)] active:scale-[0.98]',
   secondary:
-    'border border-[#111] bg-transparent text-[#111] hover:bg-[#111] hover:text-[#F9F9F7]',
+    'bg-white/[0.05] text-[#EDEDEF] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] hover:bg-white/[0.08] active:scale-[0.98]',
   ghost:
-    'bg-transparent text-[#111] hover:bg-[#E5E5E0]',
-  link:
-    'bg-transparent text-[#111] underline-offset-4 decoration-2 decoration-[#CC0000] hover:underline p-0 min-h-0',
+    'bg-transparent text-[#8A8F98] hover:bg-white/[0.05] hover:text-[#EDEDEF]',
   danger:
-    'bg-[#CC0000] text-white border border-transparent hover:bg-white hover:text-[#CC0000] hover:border-[#CC0000]',
+    'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 active:scale-[0.98]',
 };
 
 export function Button({ variant = 'primary', fullWidth, className = '', children, ...props }: ButtonProps) {
   return (
     <button
       className={`
-        font-ui inline-flex items-center justify-center gap-2
-        px-6 py-3 text-xs font-semibold uppercase tracking-widest
-        transition-all duration-200 ease-out
-        min-h-[44px] cursor-pointer
-        disabled:opacity-50 disabled:cursor-not-allowed
-        ${variantClasses[variant]}
+        inline-flex items-center justify-center gap-2
+        px-5 py-2.5 text-sm font-medium rounded-lg
+        transition-all duration-200 ease-out cursor-pointer
+        disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none
+        ${styles[variant]}
         ${fullWidth ? 'w-full' : ''}
         ${className}
       `}

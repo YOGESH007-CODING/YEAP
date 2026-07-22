@@ -26,85 +26,66 @@ export function SearchCombobox() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (query.length < 2) {
-      setResults([]);
-      setIsOpen(false);
-      return;
-    }
-
+    if (query.length < 2) { setResults([]); setIsOpen(false); return; }
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
         const res = await api.get<SearchResponse>(`/api/problems/search?q=${encodeURIComponent(query)}&limit=8`);
         setResults(res.data.problems);
         setIsOpen(true);
-      } catch {
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
+      } catch { setResults([]); }
+      finally { setLoading(false); }
     }, 300);
-
     return () => clearTimeout(timer);
   }, [query]);
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   return (
     <div ref={wrapperRef} className="relative">
       <div className="relative">
-        <Search size={16} strokeWidth={1.5} className="absolute left-2 top-1/2 -translate-y-1/2 text-[#737373]" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8F98]" />
         <input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search problems..."
-          className="font-data w-full border-b-2 border-[#111] bg-transparent pl-8 pr-3 py-2 text-sm
-                     placeholder:text-[#A3A3A3] focus:bg-[#F0F0F0] focus:outline-none transition-colors"
+          className="font-mono w-full bg-[#0F0F12] border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#EDEDEF]
+                     placeholder:text-gray-500 focus:border-[#5E6AD2] focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)] focus:outline-none transition-all duration-200"
         />
-        {loading && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 font-data text-[10px] text-[#737373] uppercase tracking-widest">
-            ...
-          </span>
-        )}
+        {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#8A8F98]">...</span>}
       </div>
 
       {isOpen && results.length > 0 && (
-        <div className="absolute z-50 top-full left-0 right-0 bg-[#F9F9F7] border border-[#111] border-t-0 max-h-80 overflow-y-auto">
-          {results.map((problem) => (
+        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#0a0a0c] border border-white/[0.08] rounded-xl overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.5)]">
+          {results.map((p) => (
             <button
-              key={problem.id}
-              onClick={() => {
-                navigate(`/review/${problem.slug}`);
-                setQuery('');
-                setIsOpen(false);
-              }}
-              className="w-full text-left px-4 py-3 border-b border-[#E5E5E0] last:border-b-0
-                         hover:bg-[#F5F5F5] transition-colors cursor-pointer flex items-center justify-between gap-3"
+              key={p.id}
+              onClick={() => { navigate(`/review/${p.slug}`); setQuery(''); setIsOpen(false); }}
+              className="w-full text-left px-4 py-3 border-b border-white/[0.04] last:border-b-0
+                         hover:bg-white/[0.05] transition-colors cursor-pointer flex items-center justify-between gap-3"
             >
               <div className="min-w-0">
-                <div className="font-display text-sm font-semibold truncate">{problem.title}</div>
-                <div className="font-data text-[10px] text-[#737373] uppercase tracking-widest mt-0.5">
-                  {problem.topicTags.slice(0, 3).join(' · ')}
+                <div className="text-sm font-medium text-[#EDEDEF] truncate">{p.title}</div>
+                <div className="font-mono text-[10px] text-[#8A8F98] tracking-wider mt-0.5">
+                  {p.topicTags.slice(0, 3).join(' · ')}
                 </div>
               </div>
-              <DifficultyBadge difficulty={problem.difficulty} />
+              <DifficultyBadge difficulty={p.difficulty} />
             </button>
           ))}
         </div>
       )}
 
       {isOpen && results.length === 0 && query.length >= 2 && !loading && (
-        <div className="absolute z-50 top-full left-0 right-0 bg-[#F9F9F7] border border-[#111] border-t-0 px-4 py-3">
-          <p className="font-body text-sm text-[#737373] italic">No problems found for "{query}"</p>
+        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#0a0a0c] border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.5)]">
+          <p className="text-sm text-[#8A8F98]">No problems found for "{query}"</p>
         </div>
       )}
     </div>

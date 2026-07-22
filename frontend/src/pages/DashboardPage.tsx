@@ -9,14 +9,7 @@ import { SearchCombobox } from '../components/SearchCombobox';
 
 interface DueItem {
   progressId: string;
-  problem: {
-    id: string;
-    slug: string;
-    title: string;
-    difficulty: string;
-    topicTags: string[];
-    companyTags: string[];
-  };
+  problem: { id: string; slug: string; title: string; difficulty: string; topicTags: string[]; companyTags: string[] };
   easinessFactor: number;
   intervalDays: number;
   repetitions: number;
@@ -24,10 +17,7 @@ interface DueItem {
   lastReviewedAt: string | null;
 }
 
-interface DueResponse {
-  success: boolean;
-  data: { count: number; items: DueItem[] };
-}
+interface DueResponse { success: boolean; data: { count: number; items: DueItem[] } }
 
 interface SyncResponse {
   success: boolean;
@@ -45,126 +35,80 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    loadDue();
-  }, []);
+  useEffect(() => { loadDue(); }, []);
 
   async function loadDue() {
     setLoading(true);
-    setError(null);
-    try {
-      const res = await api.get<DueResponse>('/api/review/due');
-      setDueItems(res.data.items);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load due problems');
-    } finally {
-      setLoading(false);
-    }
+    try { const res = await api.get<DueResponse>('/api/review/due'); setDueItems(res.data.items); }
+    catch (e) { console.error('Failed to load due items:', e); }
+    finally { setLoading(false); }
   }
 
   async function handleSync() {
-    setSyncing(true);
-    setSyncResult(null);
-    setError(null);
-    try {
-      const res = await api.post<SyncResponse>('/api/review/sync');
-      setSyncResult(res);
-      loadDue();
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'LeetCode sync failed');
-    } finally {
-      setSyncing(false);
-    }
+    setSyncing(true); setSyncResult(null);
+    try { const res = await api.post<SyncResponse>('/api/review/sync'); setSyncResult(res); loadDue(); }
+    catch (e) { console.error('Sync failed:', e); }
+    finally { setSyncing(false); }
   }
 
   const criticalCount = dueItems.filter(i => i.easinessFactor < 1.8).length;
+  const avgEF = dueItems.length > 0 ? (dueItems.reduce((s, i) => s + i.easinessFactor, 0) / dueItems.length).toFixed(2) : '—';
 
   return (
     <div className="mx-auto max-w-screen-xl px-4 py-8">
-      {/* ── Marquee Ticker ────────────────────────────────────── */}
-      {error && <div className="mb-6 border border-[#CC0000] bg-red-50 p-4 text-sm text-[#CC0000]">{error} <button className="underline" onClick={loadDue}>Retry</button></div>}
-      <div className="bg-[#111] text-[#F9F9F7] border border-[#111] overflow-hidden mb-8">
-        <div className="flex items-center gap-8 py-2 px-4 animate-marquee whitespace-nowrap">
-          {[
-            `${dueItems.length} problems due today`,
-            `${criticalCount} critical (EF < 1.8)`,
-            'SM-2 spaced repetition active',
-            'Zero external API calls in daily flow',
-          ].map((text, i) => (
-            <span key={i} className="font-data text-xs uppercase tracking-widest flex items-center gap-3">
-              <span className="inline-block h-1.5 w-1.5 bg-[#CC0000]" />
-              {text}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Stats Row ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 border-l border-t border-[#111] mb-8">
+      {/* ── Stats ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
         {[
-          { label: 'Due Today', value: dueItems.length, icon: <CheckCircle size={20} strokeWidth={1.5} /> },
-          { label: 'Critical', value: criticalCount, icon: <AlertTriangle size={20} strokeWidth={1.5} />, accent: criticalCount > 0 },
-          { label: 'Avg. EF', value: dueItems.length > 0 ? (dueItems.reduce((s, i) => s + i.easinessFactor, 0) / dueItems.length).toFixed(2) : '—', icon: <Flame size={20} strokeWidth={1.5} /> },
-          { label: 'Due Items', value: dueItems.length, icon: <ArrowRight size={20} strokeWidth={1.5} /> },
+          { label: 'Due Today', value: dueItems.length, icon: <CheckCircle size={16} />, accent: false },
+          { label: 'Critical', value: criticalCount, icon: <AlertTriangle size={16} />, accent: criticalCount > 0 },
+          { label: 'Avg EF', value: avgEF, icon: <Flame size={16} />, accent: false },
+          { label: 'Queue', value: dueItems.length, icon: <ArrowRight size={16} />, accent: false },
         ].map(({ label, value, icon, accent }, i) => (
-          <div key={i} className="border-r border-b border-[#111] p-4 lg:p-6">
+          <Card key={i} className="p-5">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[#737373]">{icon}</span>
-              <span className="font-data text-[10px] uppercase tracking-widest text-[#737373]">{label}</span>
+              <span className="text-[#8A8F98]">{icon}</span>
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[#8A8F98]">{label}</span>
             </div>
-            <div className={`font-display text-3xl lg:text-4xl font-black ${accent ? 'text-[#CC0000]' : 'text-[#111]'}`}>
-              {value}
-            </div>
-          </div>
+            <div className={`text-3xl font-semibold tracking-tight ${accent ? 'text-red-400' : 'text-[#EDEDEF]'}`}>{value}</div>
+          </Card>
         ))}
       </div>
 
-      {/* ── Main Grid: 8/4 split ──────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
-
-        {/* Left: Due Problems (8 cols) */}
-        <div className="lg:col-span-8 lg:border-r border-[#111]">
-          <div className="border-b-4 border-[#111] pb-2 mb-0 px-0 lg:pr-6">
-            <h2 className="font-display text-3xl lg:text-4xl font-black text-[#111]">
-              Due for Review
-            </h2>
-            <p className="font-body text-sm text-[#737373] mt-1">
-              Problems scheduled for practice today
-            </p>
+      {/* ── Main Grid ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left: Due list */}
+        <div className="lg:col-span-8">
+          <div className="flex items-baseline justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight bg-gradient-to-b from-white via-white/95 to-white/70 bg-clip-text text-transparent">
+                Due for Review
+              </h2>
+              <p className="text-sm text-[#8A8F98] mt-0.5">Problems scheduled for practice today</p>
+            </div>
+            <Badge variant="accent">{dueItems.length} due</Badge>
           </div>
 
           {loading ? (
-            <div className="py-16 text-center">
-              <span className="font-data text-xs uppercase tracking-widest text-[#737373]">Loading...</span>
-            </div>
+            <div className="py-16 text-center text-sm text-[#8A8F98]">Loading...</div>
           ) : dueItems.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="font-display text-2xl text-[#A3A3A3] tracking-[1em] mb-4">✦ ✦ ✦</div>
-              <h3 className="font-display text-2xl font-bold text-[#111] mb-2">All Caught Up</h3>
-              <p className="font-body text-sm text-[#737373]">No problems due for review. Use the search to report a solved problem.</p>
-            </div>
+            <Card className="py-16 text-center">
+              <p className="text-lg font-semibold text-[#EDEDEF] mb-1">All Caught Up</p>
+              <p className="text-sm text-[#8A8F98]">No problems due. Use search to report a solved problem.</p>
+            </Card>
           ) : (
-            <div className="border-t border-[#111]">
-              {dueItems.map((item, i) => (
-                <button
+            <div className="space-y-2">
+              {dueItems.map((item) => (
+                <Card
                   key={item.progressId}
+                  hoverable
                   onClick={() => navigate(`/review/${item.problem.slug}`)}
-                  className={`
-                    w-full text-left flex items-center gap-4 px-4 lg:pr-6 py-4
-                    hover:bg-[#F5F5F5] transition-colors cursor-pointer
-                    ${i < dueItems.length - 1 ? 'border-b border-[#E5E5E0]' : ''}
-                  `}
+                  className="flex items-center gap-4 px-5 py-4"
                 >
-                  {/* Index */}
-                  <span className="font-data text-xs text-[#A3A3A3] w-6 text-right">{i + 1}.</span>
-
-                  {/* Problem info */}
                   <div className="flex-1 min-w-0">
-                    <div className="font-display text-lg font-bold truncate">{item.problem.title}</div>
-                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <div className="text-sm font-medium text-[#EDEDEF] truncate">{item.problem.title}</div>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                       <DifficultyBadge difficulty={item.problem.difficulty} />
                       {item.problem.topicTags.slice(0, 2).map(tag => (
                         <Badge key={tag} variant="muted">{tag}</Badge>
@@ -172,75 +116,56 @@ export function DashboardPage() {
                     </div>
                   </div>
 
-                  {/* SM-2 stats */}
-                  <div className="hidden md:flex items-center gap-4 text-right">
+                  <div className="hidden md:flex items-center gap-5 text-right shrink-0">
                     <div>
-                      <div className="font-data text-[10px] uppercase tracking-widest text-[#737373]">EF</div>
-                      <div className={`font-data text-sm font-semibold ${item.easinessFactor < 1.8 ? 'text-[#CC0000]' : 'text-[#111]'}`}>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-white/30">EF</div>
+                      <div className={`font-mono text-sm font-medium ${item.easinessFactor < 1.8 ? 'text-red-400' : 'text-[#EDEDEF]'}`}>
                         {item.easinessFactor.toFixed(2)}
                       </div>
                     </div>
                     <div>
-                      <div className="font-data text-[10px] uppercase tracking-widest text-[#737373]">Int.</div>
-                      <div className="font-data text-sm font-semibold">{item.intervalDays}d</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-white/30">Int</div>
+                      <div className="font-mono text-sm font-medium text-[#EDEDEF]">{item.intervalDays}d</div>
                     </div>
                     <div>
-                      <div className="font-data text-[10px] uppercase tracking-widest text-[#737373]">Reps</div>
-                      <div className="font-data text-sm font-semibold">{item.repetitions}</div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-white/30">Reps</div>
+                      <div className="font-mono text-sm font-medium text-[#EDEDEF]">{item.repetitions}</div>
                     </div>
                   </div>
 
-                  <ArrowRight size={16} strokeWidth={1.5} className="text-[#A3A3A3]" />
-                </button>
+                  <ArrowRight size={14} className="text-white/20 shrink-0" />
+                </Card>
               ))}
             </div>
           )}
         </div>
 
-        {/* Right: Sidebar (4 cols) */}
-        <div className="lg:col-span-4 lg:pl-6 mt-8 lg:mt-0">
-          {/* Search */}
-          <div className="mb-8">
-            <h3 className="font-ui text-xs font-semibold uppercase tracking-widest text-[#737373] mb-3">
-              Report a Problem
-            </h3>
+        {/* Right: Sidebar */}
+        <div className="lg:col-span-4 space-y-4">
+          <div>
+            <h3 className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98] mb-2">Report a Problem</h3>
             <SearchCombobox />
-            <p className="font-body text-xs text-[#A3A3A3] mt-2 italic">
-              Search by title or slug to report a solved problem
-            </p>
+            <p className="text-[11px] text-white/30 mt-1.5">Search by title or slug</p>
           </div>
 
-          {/* Sync LeetCode */}
-          <Card className="mb-6">
-            <h3 className="font-ui text-xs font-semibold uppercase tracking-widest text-[#737373] mb-3">
-              LeetCode Sync
-            </h3>
-            <p className="font-body text-sm text-[#525252] mb-4">
-              Pull today's accepted submissions from LeetCode and auto-track new problems.
-            </p>
-            <Button
-              variant="secondary"
-              fullWidth
-              onClick={handleSync}
-              disabled={syncing}
-            >
-              <RefreshCw size={14} strokeWidth={1.5} className={syncing ? 'animate-spin' : ''} />
+          <Card className="p-5">
+            <h3 className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98] mb-2">LeetCode Sync</h3>
+            <p className="text-sm text-[#8A8F98] mb-4">Pull today's accepted submissions from LeetCode.</p>
+            <Button variant="secondary" fullWidth onClick={handleSync} disabled={syncing}>
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
               {syncing ? 'Syncing...' : 'Sync LeetCode'}
             </Button>
           </Card>
 
-          {/* Sync result */}
           {syncResult && (
-            <Card className="border-l-4 border-l-[#CC0000]">
-              <h4 className="font-ui text-xs font-semibold uppercase tracking-widest text-[#737373] mb-2">
-                Sync Result
-              </h4>
-              <p className="font-body text-sm text-[#111] mb-3">{syncResult.message}</p>
+            <Card accent className="p-5">
+              <h4 className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98] mb-2">Sync Result</h4>
+              <p className="text-sm text-[#EDEDEF] mb-2">{syncResult.message}</p>
               {syncResult.data.newlyTracked.length > 0 && (
-                <div className="space-y-1">
-                  <span className="font-data text-[10px] uppercase tracking-widest text-[#737373]">Newly Tracked:</span>
+                <div className="space-y-0.5">
+                  <span className="font-mono text-[10px] text-white/30">Newly Tracked:</span>
                   {syncResult.data.newlyTracked.map(p => (
-                    <div key={p.problemId} className="font-body text-sm">{p.title}</div>
+                    <div key={p.problemId} className="text-sm text-[#EDEDEF]">{p.title}</div>
                   ))}
                 </div>
               )}
