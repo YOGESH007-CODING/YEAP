@@ -25,6 +25,8 @@ export declare class LeetCodeGraphQLClient implements ILeetCodeClient {
      * Returns raw submission data with timestamps for sync filtering.
      */
     fetchRecentAcceptedSubmissions(leetcodeUsername: string, limit?: number): Promise<import('../../domain/interfaces/ILeetCodeClient').LeetCodeSubmission[]>;
+    private requestChain;
+    private lastRequestTime;
     private executeQuery;
     private normalizeDifficulty;
 }

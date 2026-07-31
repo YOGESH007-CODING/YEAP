@@ -13,7 +13,8 @@ const toDto = (user) => ({
     email: user.email,
     name: user.name,
     passwordHash: user.passwordHash,
-    googleId: user.googleId,
+    provider: user.provider,
+    providerId: user.providerId,
     leetcodeUsername: user.leetcodeUsername,
     telegramChatId: user.telegramChatId,
     createdAt: user.createdAt,
@@ -32,8 +33,8 @@ class PrismaUserRepository {
         const user = await this.db.user.findUnique({ where: { email } });
         return user ? toDto(user) : null;
     }
-    async findByGoogleId(googleId) {
-        const user = await this.db.user.findUnique({ where: { googleId } });
+    async findByProvider(provider, providerId) {
+        const user = await this.db.user.findUnique({ where: { provider_providerId: { provider, providerId } } });
         return user ? toDto(user) : null;
     }
     async create(data) {
@@ -42,7 +43,8 @@ class PrismaUserRepository {
                 email: data.email,
                 name: data.name,
                 passwordHash: data.passwordHash,
-                googleId: data.googleId,
+                provider: data.provider,
+                providerId: data.providerId,
                 leetcodeUsername: data.leetcodeUsername,
                 telegramChatId: data.telegramChatId,
             },

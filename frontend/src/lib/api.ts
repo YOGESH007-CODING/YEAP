@@ -7,6 +7,7 @@
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 let accessToken: string | null = null;
+let refreshTokenPromise: Promise<AuthResponse['data']> | null = null;
 
 class ApiError extends Error {
   status: number;
@@ -51,10 +52,23 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
 
 export const api = {
   setAccessToken: (token: string | null) => { accessToken = token; },
-  refresh: async () => {
-    const session = await request<AuthResponse>('/api/auth/refresh', { method: 'POST' }, false);
-    accessToken = session.data.accessToken;
-    return session.data;
+  refresh: (): Promise<AuthResponse['data']> => {
+    if (refreshTokenPromise) return refreshTokenPromise;
+
+    refreshTokenPromise = (async () => {
+      try {
+        const session = await request<AuthResponse>('/api/auth/refresh', { method: 'POST' }, false);
+        accessToken = session.data.accessToken;
+        return session.data;
+      } catch (err) {
+        accessToken = null;
+        throw err;
+      } finally {
+        refreshTokenPromise = null;
+      }
+    })();
+
+    return refreshTokenPromise;
   },
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
@@ -65,5 +79,5 @@ export const api = {
 
 export { ApiError };
 
-export interface AuthUser { id: string; email: string; name: string | null; }
+export interface AuthUser { id: string; email: string; name: string | null; leetcodeUsername?: string | null; }
 export interface AuthResponse { success: boolean; data: { accessToken: string; user: AuthUser }; }

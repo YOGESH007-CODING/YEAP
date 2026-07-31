@@ -20,7 +20,8 @@ const toDto = (user: User): UserDto => ({
   email: user.email,
   name: user.name,
   passwordHash: user.passwordHash,
-  googleId: user.googleId,
+  provider: user.provider,
+  providerId: user.providerId,
   leetcodeUsername: user.leetcodeUsername,
   telegramChatId: user.telegramChatId,
   createdAt: user.createdAt,
@@ -32,6 +33,11 @@ const toDto = (user: User): UserDto => ({
 export class PrismaUserRepository implements IUserRepository {
   constructor(private readonly db: PrismaClient) {}
 
+  async findAll(): Promise<UserDto[]> {
+    const users = await this.db.user.findMany({ orderBy: { createdAt: 'asc' } });
+    return users.map(toDto);
+  }
+
   async findById(id: string): Promise<UserDto | null> {
     const user = await this.db.user.findUnique({ where: { id } });
     return user ? toDto(user) : null;
@@ -42,8 +48,8 @@ export class PrismaUserRepository implements IUserRepository {
     return user ? toDto(user) : null;
   }
 
-  async findByGoogleId(googleId: string): Promise<UserDto | null> {
-    const user = await this.db.user.findUnique({ where: { googleId } });
+  async findByProvider(provider: UserDto['provider'], providerId: string): Promise<UserDto | null> {
+    const user = await this.db.user.findUnique({ where: { provider_providerId: { provider, providerId } } });
     return user ? toDto(user) : null;
   }
 
@@ -53,7 +59,8 @@ export class PrismaUserRepository implements IUserRepository {
         email: data.email,
         name: data.name,
         passwordHash: data.passwordHash,
-        googleId: data.googleId,
+        provider: data.provider,
+        providerId: data.providerId,
         leetcodeUsername: data.leetcodeUsername,
         telegramChatId: data.telegramChatId,
       },

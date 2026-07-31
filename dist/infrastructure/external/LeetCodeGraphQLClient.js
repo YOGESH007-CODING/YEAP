@@ -37,6 +37,8 @@ const PROBLEM_METADATA_QUERY = `
 // ─── Client ───────────────────────────────────────────────────────────────────
 class LeetCodeGraphQLClient {
     constructor(endpoint = process.env['LEETCODE_GRAPHQL_URL'] ?? 'https://leetcode.com/graphql') {
+        this.requestChain = Promise.resolve();
+        this.lastRequestTime = 0;
         this.endpoint = endpoint;
     }
     /**
@@ -110,24 +112,41 @@ class LeetCodeGraphQLClient {
     }
     // ─── Private Helpers ─────────────────────────────────────────────────────────
     async executeQuery(query, variables) {
-        const response = await fetch(this.endpoint, {
-            method: 'POST',
-            signal: AbortSignal.timeout(15000), // 15s timeout — LeetCode API can be slow
-            headers: {
-                'Content-Type': 'application/json',
-                'User-Agent': 'YEAP-SRS/1.0',
-                Referer: 'https://leetcode.com',
-            },
-            body: JSON.stringify({ query, variables }),
+        return new Promise((resolve, reject) => {
+            this.requestChain = this.requestChain.then(async () => {
+                try {
+                    const now = Date.now();
+                    const elapsed = now - this.lastRequestTime;
+                    if (elapsed < 2000) {
+                        const delay = 2000 - elapsed;
+                        logger_1.logger.debug(`[LeetCodeClient] Throttling request by ${delay}ms...`);
+                        await new Promise((r) => setTimeout(r, delay));
+                    }
+                    this.lastRequestTime = Date.now();
+                    const response = await fetch(this.endpoint, {
+                        method: 'POST',
+                        signal: AbortSignal.timeout(15000), // 15s timeout — LeetCode API can be slow
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'User-Agent': 'YEAP-SRS/1.0',
+                            Referer: 'https://leetcode.com',
+                        },
+                        body: JSON.stringify({ query, variables }),
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status} from LeetCode GraphQL: ${response.statusText}`);
+                    }
+                    const json = (await response.json());
+                    if (json.errors?.length) {
+                        throw new Error(`GraphQL error: ${json.errors.map((e) => e.message).join(', ')}`);
+                    }
+                    resolve(json);
+                }
+                catch (error) {
+                    reject(error);
+                }
+            });
         });
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status} from LeetCode GraphQL: ${response.statusText}`);
-        }
-        const json = (await response.json());
-        if (json.errors?.length) {
-            throw new Error(`GraphQL error: ${json.errors.map((e) => e.message).join(', ')}`);
-        }
-        return json;
     }
     normalizeDifficulty(raw) {
         const map = {

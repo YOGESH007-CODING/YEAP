@@ -11,7 +11,7 @@ export declare class PrismaUserRepository implements IUserRepository {
     constructor(db: PrismaClient);
     findById(id: string): Promise<UserDto | null>;
     findByEmail(email: string): Promise<UserDto | null>;
-    findByGoogleId(googleId: string): Promise<UserDto | null>;
+    findByProvider(provider: UserDto['provider'], providerId: string): Promise<UserDto | null>;
     create(data: CreateUserDto): Promise<UserDto>;
     update(id: string, data: UpdateUserDto): Promise<UserDto>;
     delete(id: string): Promise<void>;

@@ -29,6 +29,11 @@ import { logger } from '../../shared/utils/logger';
 /** Maximum number of items dispatched to any single user per morning run. */
 const BACKLOG_SOFT_CAP = 5;
 
+/** Each user is automatically seeded until they track this many problems. */
+const MINIMUM_TRACKED_PROBLEMS = 5;
+
+const FAANG_COMPANIES = ['Amazon', 'Google', 'Meta', 'Microsoft', 'Apple'];
+
 /** Items with EF below this are considered "critical" and flagged in the bundle. */
 const CRITICAL_EF_THRESHOLD = 1.8;
 
@@ -77,28 +82,21 @@ export class QueueCompilationEngine {
       failures: [],
     };
 
-    // ── 1. Pull all due items from DB (indexed query on dueDate) ─────────
-    // The repository handles grouping efficiently; we fetch with a generous
-    // per-user limit and apply the final cap here in application logic.
-    const allDueItems = await this.progressRepo.findAllDue(BACKLOG_SOFT_CAP * 2);
+    // Check every user so a new user with no existing progress is seeded too.
+    const users = await this.userRepo.findAll();
+    logger.info(`[QueueCompilationEngine] Checking queues for ${users.length} users.`);
 
-    if (allDueItems.length === 0) {
-      logger.info('[QueueCompilationEngine] No due items found. Nothing to dispatch.');
-      return result;
-    }
-
-    // ── 2. Group by userId ────────────────────────────────────────────────
-    const byUser = this.groupByUser(allDueItems);
-    logger.info(`[QueueCompilationEngine] Found due items for ${byUser.size} users.`);
-
-    // ── 3. Process each user's queue ──────────────────────────────────────
-    for (const [userId, items] of byUser.entries()) {
+    for (const user of users) {
       try {
-        await this.processUserQueue(userId, items, result);
+        await this.seedMinimumQueue(user.id);
+        const items = await this.progressRepo.findDueByUser(user.id, BACKLOG_SOFT_CAP * 2);
+        if (items.length > 0) {
+          await this.processUserQueue(user.id, items, result);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        logger.error(`[QueueCompilationEngine] Failed for user ${userId}: ${message}`);
-        result.failures.push({ userId, error: message });
+        logger.error(`[QueueCompilationEngine] Failed for user ${user.id}: ${message}`);
+        result.failures.push({ userId: user.id, error: message });
       }
     }
 
@@ -113,6 +111,31 @@ export class QueueCompilationEngine {
   }
 
   // ─── Private Helpers ───────────────────────────────────────────────────────
+
+  /**
+   * Adds random unseen FAANG problems only until a user has five tracked
+   * problems. findOrCreate keeps the insert idempotent across retries.
+   */
+  private async seedMinimumQueue(userId: string): Promise<void> {
+    const tracked = await this.progressRepo.findAllByUser(userId);
+    const required = MINIMUM_TRACKED_PROBLEMS - tracked.length;
+    if (required <= 0) return;
+
+    const unseen = await this.problemRepo.getUnseenProblems(
+      userId,
+      required,
+      FAANG_COMPANIES,
+    );
+
+    for (const problem of unseen) {
+      await this.progressRepo.findOrCreate(userId, problem.id);
+    }
+
+    logger.info(
+      `[QueueCompilationEngine] Added ${unseen.length} unseen FAANG problems ` +
+      `for user ${userId} (${tracked.length + unseen.length}/${MINIMUM_TRACKED_PROBLEMS} tracked).`,
+    );
+  }
 
   private async processUserQueue(
     userId: string,
@@ -157,7 +180,7 @@ export class QueueCompilationEngine {
       const bonusProblems = await this.problemRepo.getUnseenProblems(
         userId,
         needed,
-        ['Amazon', 'Google', 'Meta', 'Microsoft', 'Apple'],
+        FAANG_COMPANIES,
       );
 
       for (const problem of bonusProblems) {
@@ -202,15 +225,4 @@ export class QueueCompilationEngine {
     }
   }
 
-  private groupByUser(
-    items: DueProgressWithProblem[],
-  ): Map<string, DueProgressWithProblem[]> {
-    const map = new Map<string, DueProgressWithProblem[]>();
-    for (const item of items) {
-      const existing = map.get(item.userId) ?? [];
-      existing.push(item);
-      map.set(item.userId, existing);
-    }
-    return map;
-  }
 }

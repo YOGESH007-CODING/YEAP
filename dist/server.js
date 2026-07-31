@@ -5,8 +5,15 @@
  * Application bootstrapper and HTTP server listener.
  * Loads environment and starts the Express API.
  */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-require("dotenv/config");
+const dotenv_1 = __importDefault(require("dotenv"));
+const path_1 = __importDefault(require("path"));
+// Load .env.local first if it exists, otherwise fall back to .env
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '.env.local') });
+dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '.env') });
 const app_1 = require("./app");
 const prismaClient_1 = require("./infrastructure/database/prismaClient");
 // Redis/BullMQ worker support is disabled for the Vercel deployment.

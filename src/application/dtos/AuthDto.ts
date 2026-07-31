@@ -17,10 +17,6 @@ export const LoginDto = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-export const GoogleAuthDto = z.object({
-  idToken: z.string().min(1, 'Google ID token is required'),
-});
-
 export const RefreshDto = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required'),
 });
@@ -31,5 +27,4 @@ export const UpdateProfileDto = z.object({
 
 export type RegisterInput = z.infer<typeof RegisterDto>;
 export type LoginInput = z.infer<typeof LoginDto>;
-export type GoogleAuthInput = z.infer<typeof GoogleAuthDto>;
 export type RefreshInput = z.infer<typeof RefreshDto>;

@@ -1,9 +1,8 @@
 /**
  * src/lib/auth.ts
  *
- * Auth context + dev token helper.
- * In production, this would integrate with Google OAuth.
- * For now, supports the existing dev_<base64> token format.
+ * Auth context – provides user session state and sign-in/sign-out
+ * methods to the React component tree via AuthContext.
  */
 
 import { createContext, useContext } from 'react';
@@ -12,6 +11,7 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string | null;
+  leetcodeUsername?: string | null;
 }
 
 export interface AuthContextType {
@@ -31,8 +31,3 @@ export const AuthContext = createContext<AuthContextType>({
 });
 
 export const useAuth = () => useContext(AuthContext);
-
-export function generateDevToken(id: string, email: string): string {
-  const payload = { id, email, role: 'developer' };
-  return `dev_${btoa(JSON.stringify(payload))}`;
-}

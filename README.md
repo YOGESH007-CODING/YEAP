@@ -1,7 +1,7 @@
 # YEAP — Your Early AM Practice 🌅
 
 > A LeetCode Spaced Repetition System (SRS) backend built on clean architecture,
-> the SM-2 algorithm. Redis-powered async delivery is currently disabled for Vercel deployment.
+> the SM-2 algorithm, with optional Redis/BullMQ-powered daily email delivery.
 
 ---
 
@@ -19,7 +19,10 @@
        ▼ (GraphQL)                           ▼ (Prisma Client)
 [LeetCode API]                        [PostgreSQL DB]
                                              │
-                              [Daily notifications disabled]
+                              [BullMQ Daily Queue]
+                                      │
+                                      ▼
+                           [Worker → Resend Email]
 ```
 
 ### Layer Boundaries
@@ -56,7 +59,11 @@ npm run prisma:seed
 ### 5. Run
 ```bash
 npm run dev          # HTTP server
-# Redis/BullMQ worker is disabled for the Vercel deployment.
+# API only (the default; suitable for Vercel)
+npm run dev
+
+# Persistent host only: enables Redis, the daily scheduler, and worker
+ENABLE_WORKER=true npm run dev
 ```
 
 ### 6. Test
@@ -136,7 +143,18 @@ Health check (no auth required).
 - **Runtime:** Node.js 18+ / TypeScript 5
 - **HTTP:** Express 4
 - **DB:** PostgreSQL via Prisma ORM
-- **Queue/Scheduler:** Disabled for the Vercel deployment
-- **Notifications:** Telegram Bot API / SendGrid
+- **Queue/Scheduler:** BullMQ 5 + Redis (optional persistent worker)
+- **Notifications:** Resend email API
 - **Testing:** Jest + ts-jest
 - **Validation:** Zod
+
+## Daily review worker deployment
+
+The HTTP API defaults to `ENABLE_WORKER=false`, so it needs neither Redis nor a
+long-running process and can be deployed to Vercel unchanged. Run the worker on
+a persistent service such as Railway, Render, or Fly.io with `ENABLE_WORKER=true`,
+`REDIS_URL`, `RESEND_API_KEY`, and a verified `NOTIFICATION_FROM_EMAIL`.
+
+The worker registers an idempotent BullMQ scheduler which runs at `0 4 * * *`
+in `Asia/Kolkata` by default. Override this with `QUEUE_CRON` and
+`QUEUE_TIMEZONE` when required.

@@ -18,7 +18,6 @@ const config = {
     'src/**/*.ts',
     '!src/**/*.d.ts',
     '!src/server.ts',
-    '!src/infrastructure/workers/**',
   ],
   coverageReporters: ['text', 'lcov', 'html'],
 };

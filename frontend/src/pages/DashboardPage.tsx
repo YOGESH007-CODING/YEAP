@@ -17,7 +17,7 @@ interface DueItem {
   lastReviewedAt: string | null;
 }
 
-interface DueResponse { success: boolean; data: { count: number; items: DueItem[] } }
+interface DueResponse { success: boolean; data: { count: number; totalTracked?: number; items: DueItem[] } }
 
 interface SyncResponse {
   success: boolean;
@@ -32,6 +32,7 @@ interface SyncResponse {
 
 export function DashboardPage() {
   const [dueItems, setDueItems] = useState<DueItem[]>([]);
+  const [totalTracked, setTotalTracked] = useState(0);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResponse | null>(null);
@@ -41,7 +42,11 @@ export function DashboardPage() {
 
   async function loadDue() {
     setLoading(true);
-    try { const res = await api.get<DueResponse>('/api/review/due'); setDueItems(res.data.items); }
+    try {
+      const res = await api.get<DueResponse>('/api/review/due');
+      setDueItems(res.data.items);
+      setTotalTracked(res.data.totalTracked ?? res.data.items.length);
+    }
     catch (e) { console.error('Failed to load due items:', e); }
     finally { setLoading(false); }
   }
@@ -64,7 +69,7 @@ export function DashboardPage() {
           { label: 'Due Today', value: dueItems.length, icon: <CheckCircle size={16} />, accent: false },
           { label: 'Critical', value: criticalCount, icon: <AlertTriangle size={16} />, accent: criticalCount > 0 },
           { label: 'Avg EF', value: avgEF, icon: <Flame size={16} />, accent: false },
-          { label: 'Queue', value: dueItems.length, icon: <ArrowRight size={16} />, accent: false },
+          { label: 'Queue', value: totalTracked, icon: <ArrowRight size={16} />, accent: false },
         ].map(({ label, value, icon, accent }, i) => (
           <Card key={i} className="p-5">
             <div className="flex items-center gap-2 mb-2">

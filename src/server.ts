@@ -2,21 +2,35 @@
  * src/server.ts
  *
  * Application bootstrapper and HTTP server listener.
- * Loads environment and starts the Express API.
+ * Loads environment and starts Express API (and optional persistent BullMQ worker).
  */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Load .env.local first if it exists, otherwise fall back to .env
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 import { createApp } from './app';
 import { disconnectPrisma } from './infrastructure/database/prismaClient';
-// Redis/BullMQ worker support is disabled for the Vercel deployment.
-// import { verifyRedisConnection } from './infrastructure/workers/queueSetup';
+import { verifyRedisConnection, registerDailyJob, closeQueue } from './infrastructure/workers/queueSetup';
+import { createDailyQueueWorker, closeWorker } from './infrastructure/workers/DailyQueueWorker';
 import { logger } from './shared/utils/logger';
 
 const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
+const ENABLE_WORKER = process.env['ENABLE_WORKER'] === 'true';
 
 const startServer = async (): Promise<void> => {
-  // Redis/BullMQ startup verification is disabled. The API does not require Redis.
-  // await verifyRedisConnection();
+  // If persistent worker mode is explicitly enabled (e.g. Railway / Render / Fly.io)
+  if (ENABLE_WORKER) {
+    logger.info('[Worker] ENABLE_WORKER=true. Initializing BullMQ Worker & Redis connection...');
+    await verifyRedisConnection();
+    await registerDailyJob();
+    createDailyQueueWorker();
+  } else {
+    logger.info('[Server] ENABLE_WORKER=false (Vercel mode). Worker and Redis scheduler disabled.');
+  }
 
   const app = createApp();
 
@@ -30,6 +44,10 @@ const startServer = async (): Promise<void> => {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`[Server] Received ${signal}. Shutting down gracefully...`);
     server.close(async () => {
+      if (ENABLE_WORKER) {
+        await closeWorker();
+        await closeQueue();
+      }
       await disconnectPrisma();
       logger.info('[Server] Server closed. Goodbye!');
       process.exit(0);

@@ -119,10 +119,12 @@ exports.ReviewController = {
         }
         try {
             const dueItems = await progressRepository.findDueByUser(req.userId, 20);
+            const allTracked = await progressRepository.findAllByUser(req.userId);
             res.status(200).json({
                 success: true,
                 data: {
                     count: dueItems.length,
+                    totalTracked: allTracked.length,
                     items: dueItems.map((item) => ({
                         progressId: item.id,
                         problem: item.problem,

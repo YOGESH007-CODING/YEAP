@@ -5,7 +5,7 @@
  * Zod validation schemas for all auth endpoints.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateProfileDto = exports.RefreshDto = exports.GoogleAuthDto = exports.LoginDto = exports.RegisterDto = void 0;
+exports.UpdateProfileDto = exports.RefreshDto = exports.LoginDto = exports.RegisterDto = void 0;
 const zod_1 = require("zod");
 exports.RegisterDto = zod_1.z.object({
     email: zod_1.z.string().email('Invalid email address'),
@@ -15,9 +15,6 @@ exports.RegisterDto = zod_1.z.object({
 exports.LoginDto = zod_1.z.object({
     email: zod_1.z.string().email('Invalid email address'),
     password: zod_1.z.string().min(1, 'Password is required'),
-});
-exports.GoogleAuthDto = zod_1.z.object({
-    idToken: zod_1.z.string().min(1, 'Google ID token is required'),
 });
 exports.RefreshDto = zod_1.z.object({
     refreshToken: zod_1.z.string().min(1, 'Refresh token is required'),

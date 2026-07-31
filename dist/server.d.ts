@@ -4,5 +4,5 @@
  * Application bootstrapper and HTTP server listener.
  * Loads environment and starts the Express API.
  */
-import 'dotenv/config';
+export {};
 //# sourceMappingURL=server.d.ts.map

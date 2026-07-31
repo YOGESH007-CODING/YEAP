@@ -4,7 +4,7 @@
  * Concrete implementation of IProblemRepository using Prisma.
  */
 
-import type { PrismaClient, Problem } from '@prisma/client';
+import { Prisma, type PrismaClient, type Problem } from '@prisma/client';
 import type {
   IProblemRepository,
   ProblemDto,
@@ -86,19 +86,28 @@ export class PrismaProblemRepository implements IProblemRepository {
     companyTags?: string[],
     topicTags?: string[],
   ): Promise<ProblemDto[]> {
-    const problems = await this.db.problem.findMany({
-      where: {
-        progresses: {
-          none: {
-            userId,
-          },
-        },
-        ...(companyTags ? { companyTags: { hasSome: companyTags } } : {}),
-        ...(topicTags ? { topicTags: { hasSome: topicTags } } : {}),
-      },
-      take: limit,
-      orderBy: { createdAt: 'desc' },
-    });
+    // PostgreSQL's ORDER BY RANDOM() ensures every eligible unseen problem has
+    // an equal chance of being selected. Prisma does not expose this ordering.
+    const companyFilter = companyTags && companyTags.length > 0
+      ? Prisma.sql`AND p."companyTags" && ARRAY[${Prisma.join(companyTags)}]::text[]`
+      : Prisma.empty;
+    const topicFilter = topicTags && topicTags.length > 0
+      ? Prisma.sql`AND p."topicTags" && ARRAY[${Prisma.join(topicTags)}]::text[]`
+      : Prisma.empty;
+
+    const problems = await this.db.$queryRaw<Problem[]>`
+      SELECT p.*
+      FROM problems p
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM problem_progresses progress
+        WHERE progress."problemId" = p.id AND progress."userId" = ${userId}
+      )
+      ${companyFilter}
+      ${topicFilter}
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `;
 
     return problems.map(toDto);
   }

@@ -1,16 +1,57 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Code, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 
 export function SettingsPage() {
-  const { user } = useAuth();
-  const [leetcodeUsername, setLeetcodeUsername] = useState('');
+  const { user, token, signIn } = useAuth();
+  const [leetcodeUsername, setLeetcodeUsername] = useState(user?.leetcodeUsername || '');
+  const [isEditing, setIsEditing] = useState(!user?.leetcodeUsername);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 3000); };
+  useEffect(() => {
+    if (user?.leetcodeUsername) {
+      setLeetcodeUsername(user.leetcodeUsername);
+      setIsEditing(false);
+    } else {
+      setLeetcodeUsername('');
+      setIsEditing(true);
+    }
+  }, [user?.leetcodeUsername]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leetcodeUsername.trim()) {
+      setError('Username cannot be empty');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setSaved(false);
+
+    try {
+      const res = await api.patch<{ success: boolean; data: typeof user }>('/api/auth/profile', {
+        leetcodeUsername: leetcodeUsername.trim(),
+      });
+      if (res.success && res.data && token) {
+        signIn({ accessToken: token, user: res.data });
+        setSaved(true);
+        setIsEditing(false);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        throw new Error('Failed to update profile');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-screen-xl px-4 py-8">
@@ -34,7 +75,6 @@ export function SettingsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><span className="font-mono text-[10px] uppercase tracking-widest text-white/30">Name</span><p className="text-sm text-[#EDEDEF] mt-0.5">{user?.name || 'Dev User'}</p></div>
             <div><span className="font-mono text-[10px] uppercase tracking-widest text-white/30">Email</span><p className="text-sm text-[#EDEDEF] mt-0.5">{user?.email || 'dev@local'}</p></div>
-            <div><span className="font-mono text-[10px] uppercase tracking-widest text-white/30">User ID</span><p className="font-mono text-xs text-[#8A8F98] mt-0.5">{user?.id || '—'}</p></div>
           </div>
         </Card>
 
@@ -49,13 +89,55 @@ export function SettingsPage() {
               <p className="font-mono text-[10px] uppercase tracking-widest text-white/30">Account Link</p>
             </div>
           </div>
-          <div className="space-y-4">
-            <Input label="LeetCode Username" value={leetcodeUsername} onChange={(e) => setLeetcodeUsername(e.target.value)} placeholder="e.g. YOGESH_SHARMA_1209" />
-            <div className="flex items-center gap-3">
-              <Button variant="secondary" onClick={handleSave}>Save Username</Button>
-              {saved && <span className="font-mono text-[10px] text-green-400">✓ Saved</span>}
+
+          {error && (
+            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+              {error}
             </div>
-          </div>
+          )}
+
+          {!isEditing && user?.leetcodeUsername ? (
+            <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/[0.04] rounded-xl">
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">Linked Username</span>
+                  <span className="text-sm font-medium text-[#EDEDEF] mt-0.5">{user.leetcodeUsername}</span>
+                </div>
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#5E6AD2]/10 text-[#8B94E5] border border-[#5E6AD2]/20 uppercase tracking-wider font-mono">
+                  Connected
+                </span>
+              </div>
+              <Button variant="secondary" onClick={() => setIsEditing(true)}>
+                Change Username
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleSave} className="space-y-4">
+              <Input
+                label="LeetCode Username"
+                value={leetcodeUsername}
+                onChange={(e) => setLeetcodeUsername(e.target.value)}
+                placeholder="e.g. your_leetcode_username"
+                disabled={loading}
+                required
+              />
+              <div className="flex items-center gap-3">
+                <Button type="submit" variant="secondary" disabled={loading}>
+                  {loading ? 'Saving...' : user?.leetcodeUsername ? 'Save Username' : 'Link Account'}
+                </Button>
+                {user?.leetcodeUsername && (
+                  <Button type="button" variant="ghost" onClick={() => {
+                    setLeetcodeUsername(user.leetcodeUsername || '');
+                    setIsEditing(false);
+                    setError(null);
+                  }} disabled={loading}>
+                    Cancel
+                  </Button>
+                )}
+                {saved && <span className="font-mono text-[10px] text-green-400">✓ Saved</span>}
+              </div>
+            </form>
+          )}
         </Card>
 
         {/* Danger Zone */}

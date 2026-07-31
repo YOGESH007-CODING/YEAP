@@ -6,25 +6,6 @@ const prisma = new PrismaClient();
 
 async function main() {
   console.log('Reading JSON files...');
-  // ─── Seed Single Test User ──────────────────────────────────────────────────
-  console.log('Seeding single test user...');
-  const testUser = await prisma.user.upsert({
-    where: { id: 'test-user-id' }, // Fixed, known user ID
-    update: {
-      email: 'test@example.com', // Replace with your personal testing email if needed
-      googleId: 'test-google-id', // Replace with your personal Google OAuth ID if needed
-      leetcodeUsername: 'test-leetcode-username', // Replace with your personal LeetCode username
-      name: 'Test User',
-    },
-    create: {
-      id: 'test-user-id',
-      email: 'test@example.com',
-      googleId: 'test-google-id',
-      leetcodeUsername: 'test-leetcode-username',
-      name: 'Test User',
-    },
-  });
-  console.log(`Seeded user: ${testUser.email} (ID: ${testUser.id})`);
 
   // 1. Load the JSON files
   const seedDataPath = path.join(__dirname, 'prisma_problems_seed.json');
