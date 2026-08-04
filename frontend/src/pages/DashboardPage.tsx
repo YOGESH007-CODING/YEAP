@@ -36,30 +36,34 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResponse | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => { loadDue(); }, []);
 
-  async function loadDue() {
-    setLoading(true);
+  async function loadDue(showLoading = true) {
+    if (showLoading) setLoading(true);
     try {
       const res = await api.get<DueResponse>('/api/review/due');
       setDueItems(res.data.items);
       setTotalTracked(res.data.totalTracked ?? res.data.items.length);
     }
     catch (e) { console.error('Failed to load due items:', e); }
-    finally { setLoading(false); }
+    finally { if (showLoading) setLoading(false); }
   }
 
   async function handleSync() {
-    setSyncing(true); setSyncResult(null);
-    try { const res = await api.post<SyncResponse>('/api/review/sync'); setSyncResult(res); loadDue(); }
-    catch (e) { console.error('Sync failed:', e); }
+    setSyncing(true); setSyncResult(null); setSyncError(null);
+    try { const res = await api.post<SyncResponse>('/api/review/sync'); setSyncResult(res); await loadDue(false); }
+    catch (e) { setSyncError(e instanceof Error ? e.message : 'Unable to sync LeetCode. Please try again.'); }
     finally { setSyncing(false); }
   }
 
-  const criticalCount = dueItems.filter(i => i.easinessFactor < 1.8).length;
-  const avgEF = dueItems.length > 0 ? (dueItems.reduce((s, i) => s + i.easinessFactor, 0) / dueItems.length).toFixed(2) : '—';
+  const validEasinessFactors = dueItems.map((item) => Number(item.easinessFactor)).filter(Number.isFinite);
+  const criticalCount = validEasinessFactors.filter((factor) => factor < 1.8).length;
+  const avgEF = validEasinessFactors.length > 0
+    ? (validEasinessFactors.reduce((sum, factor) => sum + factor, 0) / validEasinessFactors.length).toFixed(2)
+    : '—';
 
   return (
     <div className="mx-auto max-w-screen-xl px-4 py-8">
@@ -161,6 +165,12 @@ export function DashboardPage() {
               {syncing ? 'Syncing...' : 'Sync LeetCode'}
             </Button>
           </Card>
+
+          {syncError && (
+            <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+              {syncError}
+            </div>
+          )}
 
           {syncResult && (
             <Card accent className="p-5">

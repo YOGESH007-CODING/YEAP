@@ -26,10 +26,10 @@ function App() {
   }, []);
 
   const signOut = useCallback(async () => {
-    await api.post('/api/auth/logout').catch(() => {});
     api.setAccessToken(null);
     setToken(null);
     setUser(null);
+    await api.post('/api/auth/logout').catch(() => {});
   }, []);
 
   const authValue = useMemo(() => ({

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { api, type AuthResponse } from '../lib/api';
+import { API_BASE_URL, api, type AuthResponse } from '../lib/api';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 
-const oauthBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+const oauthBaseUrl = API_BASE_URL;
 
 export function LoginPage() {
   const { signIn } = useAuth();

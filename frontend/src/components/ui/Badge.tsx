@@ -24,6 +24,7 @@ export function Badge({ variant = 'default', children, className = '' }: BadgePr
 }
 
 export function DifficultyBadge({ difficulty }: { difficulty: string }) {
-  const v = difficulty === 'EASY' ? 'easy' : difficulty === 'MEDIUM' ? 'medium' : 'hard';
+  const normalizedDifficulty = difficulty.toUpperCase();
+  const v = normalizedDifficulty === 'EASY' ? 'easy' : normalizedDifficulty === 'MEDIUM' ? 'medium' : 'hard';
   return <Badge variant={v}>{difficulty}</Badge>;
 }

@@ -4,8 +4,9 @@
   "description": "YEAP – Your Early AM Practice: LeetCode Spaced Repetition System Backend",
   "main": "dist/server.js",
   "scripts": {
+     "postinstall": "prisma generate",
+    "build": "prisma generate && tsc",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
-    "build": "tsc",
     "start": "node dist/server.js",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:seed": "ts-node prisma/seed.ts",

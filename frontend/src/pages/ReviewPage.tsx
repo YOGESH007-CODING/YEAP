@@ -11,7 +11,7 @@ interface ReportResponse {
   success: boolean; message: string;
   data: { problemId: string; problemSlug: string; problemTitle: string; difficulty: string; newInterval: number; newEasinessFactor: number; nextDueDate: string; repetitions: number; qualityScore: number };
 }
-interface SearchResponse { success: boolean; data: { problems: Problem[] } }
+interface ProblemResponse { success: boolean; data: Problem }
 
 export function ReviewPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -25,8 +25,8 @@ export function ReviewPage() {
 
   useEffect(() => {
     if (!slug) return;
-    api.get<SearchResponse>(`/api/problems/search?q=${encodeURIComponent(slug)}&limit=1`)
-      .then(res => setProblem(res.data.problems.find(p => p.slug === slug) || res.data.problems[0] || null))
+    api.get<ProblemResponse>(`/api/problems/${encodeURIComponent(slug)}`)
+      .then(res => setProblem(res.data))
       .catch(() => setError('Failed to load problem'))
       .finally(() => setLoading(false));
   }, [slug]);

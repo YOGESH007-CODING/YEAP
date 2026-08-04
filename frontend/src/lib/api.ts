@@ -5,7 +5,7 @@
  * All API calls go through here.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+export const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 let accessToken: string | null = null;
 let refreshTokenPromise: Promise<AuthResponse['data']> | null = null;
 
@@ -20,7 +20,7 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}, retry = true): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     credentials: 'include',
     headers: {
@@ -40,13 +40,27 @@ async function request<T>(path: string, options: RequestInit = {}, retry = true)
     }
   }
 
-  if (res.status === 204) return undefined as T;
-  const data = await res.json() as { error?: string };
+  // A token that still receives a 401 after the refresh attempt cannot be used.
+  // Clear it so later requests do not repeatedly trigger a refresh.
+  if (res.status === 401) accessToken = null;
 
-  if (!res.ok) {
-    throw new ApiError(res.status, data.error || 'Request failed');
+  if (res.status === 204) return undefined as T;
+  const contentType = res.headers.get('content-type') ?? '';
+  const body = await res.text();
+  let data: { error?: string } | undefined;
+  if (contentType.includes('application/json') && body) {
+    try {
+      data = JSON.parse(body) as { error?: string };
+    } catch {
+      if (res.ok) throw new ApiError(res.status, 'Server returned invalid JSON');
+    }
   }
 
+  if (!res.ok) {
+    throw new ApiError(res.status, data?.error || body || `Request failed (${res.status})`);
+  }
+
+  if (!data) throw new ApiError(res.status, 'Server returned an invalid response');
   return data as T;
 }
 
@@ -70,7 +84,7 @@ export const api = {
 
     return refreshTokenPromise;
   },
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, options: RequestInit = {}) => request<T>(path, options),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>

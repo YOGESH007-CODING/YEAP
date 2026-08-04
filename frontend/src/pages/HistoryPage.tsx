@@ -44,9 +44,8 @@ export function HistoryPage() {
     return Array.from(tags).sort();
   }, [items]);
 
-  const now = new Date();
-
   const filtered = useMemo(() => {
+    const now = new Date();
     return items
       .filter(item => {
         if (search && !item.problem.title.toLowerCase().includes(search.toLowerCase()) && !item.problem.slug.toLowerCase().includes(search.toLowerCase())) return false;
@@ -63,7 +62,7 @@ export function HistoryPage() {
         else { aVal = a[sortKey]; bVal = b[sortKey]; }
         return aVal < bVal ? (sortDir === 'asc' ? -1 : 1) : aVal > bVal ? (sortDir === 'asc' ? 1 : -1) : 0;
       });
-  }, [items, search, difficulty, dueFilter, topicTag, sortKey, sortDir, now]);
+  }, [items, search, difficulty, dueFilter, topicTag, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -160,7 +159,7 @@ export function HistoryPage() {
               </thead>
               <tbody>
                 {pageItems.map((item) => {
-                  const overdue = new Date(item.dueDate) <= now;
+                  const overdue = new Date(item.dueDate).getTime() <= Date.now();
                   return (
                     <tr key={item.progressId} className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors cursor-pointer"
                         onClick={() => navigate(`/review/${item.problem.slug}`)}>
@@ -188,7 +187,7 @@ export function HistoryPage() {
           {/* Mobile list */}
           <div className="md:hidden space-y-2">
             {pageItems.map(item => {
-              const overdue = new Date(item.dueDate) <= now;
+              const overdue = new Date(item.dueDate).getTime() <= Date.now();
               return (
                 <Card key={item.progressId} hoverable onClick={() => navigate(`/review/${item.problem.slug}`)} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
