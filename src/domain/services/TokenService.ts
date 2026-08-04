@@ -27,6 +27,7 @@ export interface AccessTokenPayload {
   sub: string;       // User ID
   email: string;
   type: 'access';
+  ver: number;
 }
 
 export interface RefreshTokenPayload {
@@ -41,8 +42,8 @@ export const TokenService = {
   /**
    * Creates a short-lived JWT access token (15 min).
    */
-  signAccessToken(userId: string, email: string): string {
-    const payload: AccessTokenPayload = { sub: userId, email, type: 'access' };
+  signAccessToken(userId: string, email: string, tokenVersion = 0): string {
+    const payload: AccessTokenPayload = { sub: userId, email, type: 'access', ver: tokenVersion };
     return jwt.sign(payload, accessTokenSecret(), { expiresIn: ACCESS_TOKEN_EXPIRY });
   },
 

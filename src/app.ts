@@ -12,6 +12,7 @@ import reviewRoutes from './infrastructure/web/routes/reviewRoutes';
 import problemRoutes from './infrastructure/web/routes/problemRoutes';
 import authRoutes from './infrastructure/web/routes/authRoutes';
 import helmet from 'helmet';
+import { requestContext } from './infrastructure/web/middleware/requestContext';
 
 // ─── App Factory ──────────────────────────────────────────────────────────────
 
@@ -28,6 +29,7 @@ export const createApp = () => {
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));
+  app.use(requestContext);
 
   // ── Request Logging ───────────────────────────────────────────────────
   app.use((req: Request, _res: Response, next: NextFunction) => {

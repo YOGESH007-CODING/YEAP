@@ -25,6 +25,13 @@ export const UpdateProfileDto = z.object({
   leetcodeUsername: z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9_-]+$/, 'Invalid LeetCode username'),
 });
 
+export const DeleteAccountDto = z.object({
+  password: z.string().min(1).max(128).optional(),
+}).strict();
+
+export const DeleteAccountReauthDto = z.object({}).strict();
+
 export type RegisterInput = z.infer<typeof RegisterDto>;
 export type LoginInput = z.infer<typeof LoginDto>;
 export type RefreshInput = z.infer<typeof RefreshDto>;
+export type DeleteAccountInput = z.infer<typeof DeleteAccountDto>;

@@ -9,6 +9,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import { TokenService } from '../../../domain/services/TokenService';
+import { prisma } from '../../database/prismaClient';
 
 // ─── Extended Request Type ────────────────────────────────────────────────────
 
@@ -23,11 +24,11 @@ declare global {
 
 // ─── JWT Payload Shape ────────────────────────────────────────────────────────
 
-export const authValidation = (
+export const authValidation = async (
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
+): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -43,6 +44,8 @@ export const authValidation = (
   try {
     const payload = TokenService.verifyAccessToken(token);
 
+    const user = await prisma.user.findFirst({ where: { id: payload.sub, deletedAt: null, tokenVersion: payload.ver } });
+    if (!user) throw new Error('Session revoked');
     req.userId = payload.sub;
     req.userEmail = payload.email;
     next();

@@ -3,11 +3,16 @@ import { AuthProvider } from '@prisma/client';
 import { randomBytes, timingSafeEqual } from 'crypto';
 import type { Request, Response } from 'express';
 import type { PrismaClient, User } from '@prisma/client';
-import { RegisterDto, LoginDto, RefreshDto, UpdateProfileDto } from '../../../application/dtos/AuthDto';
+import { RegisterDto, LoginDto, RefreshDto, UpdateProfileDto, DeleteAccountDto, DeleteAccountReauthDto } from '../../../application/dtos/AuthDto';
 import { TokenService } from '../../../domain/services/TokenService';
 import { prisma } from '../../database/prismaClient';
+import { DeleteAccountUseCase } from '../../../application/use-cases/DeleteAccountUseCase';
+import { sendAccountDeletionConfirmation } from '../../external/AccountDeletionEmailService';
+import { clientIpHash } from '../middleware/requestContext';
+import { logger } from '../../../shared/utils/logger';
+import { invalidateAccountCaches } from '../../external/AccountDeletionCacheService';
 
-type PublicUser = Pick<User, 'id' | 'email' | 'name' | 'leetcodeUsername'>;
+type PublicUser = Pick<User, 'id' | 'email' | 'name' | 'leetcodeUsername' | 'provider' | 'tokenVersion'>;
 type OAuthProviderName = 'google' | 'github';
 type OAuthProfile = { email: string; name: string | null; provider: AuthProvider; providerId: string };
 
@@ -15,7 +20,7 @@ const isProd = process.env['NODE_ENV'] === 'production';
 const cookieSameSite: 'none' | 'lax' = isProd ? 'none' : 'lax';
 const refreshCookie = { httpOnly: true, secure: isProd, sameSite: cookieSameSite, path: '/api/auth', maxAge: 30 * 24 * 60 * 60 * 1000 };
 const oauthStateCookie = { httpOnly: true, secure: isProd, sameSite: cookieSameSite, path: '/api/auth', maxAge: 10 * 60 * 1000 };
-const userResponse = (user: PublicUser) => ({ id: user.id, email: user.email, name: user.name, leetcodeUsername: user.leetcodeUsername });
+const userResponse = (user: PublicUser) => ({ id: user.id, email: user.email, name: user.name, leetcodeUsername: user.leetcodeUsername, provider: user.provider });
 
 const invalidBody = (res: Response, error: { flatten: () => unknown }): void => {
   res.status(400).json({ success: false, error: 'Invalid request body', details: error.flatten() });
@@ -26,6 +31,8 @@ const readCookie = (req: Request, name: string): string | undefined => req.heade
 
 const readRefreshToken = (req: Request): string | undefined => readCookie(req, 'yeap_refresh');
 const stateCookieName = (provider: OAuthProviderName) => `yeap_oauth_state_${provider}`;
+const deletionStateCookieName = (provider: OAuthProviderName) => `yeap_delete_state_${provider}`;
+const deletionGrantCookie = 'yeap_delete_reauth';
 
 const callbackUrl = (provider: OAuthProviderName): string => {
   const baseUrl = process.env['BACKEND_URL'] ?? `http://localhost:${process.env['PORT'] ?? '3000'}`;
@@ -41,7 +48,7 @@ const issueTokens = async (db: PrismaClient, user: PublicUser) => {
   await db.refreshToken.create({
     data: { token: TokenService.hashRefreshToken(refreshToken), userId: user.id, expiresAt: TokenService.refreshTokenExpiresAt() },
   });
-  return { accessToken: TokenService.signAccessToken(user.id, user.email), refreshToken, user: userResponse(user) };
+  return { accessToken: TokenService.signAccessToken(user.id, user.email, user.tokenVersion), refreshToken, user: userResponse(user) };
 };
 
 const exchangeAuthorizationCode = async (url: string, parameters: Record<string, string>): Promise<Record<string, unknown>> => {
@@ -163,12 +170,24 @@ export class AuthController {
     return async (req: Request, res: Response): Promise<void> => {
       const state = typeof req.query['state'] === 'string' ? req.query['state'] : undefined;
       const expectedState = readCookie(req, stateCookieName(provider));
+      const deletionState = readCookie(req, deletionStateCookieName(provider));
       res.clearCookie(stateCookieName(provider), { path: '/api/auth' });
-      if (!state || !expectedState || state.length !== expectedState.length || !timingSafeEqual(Buffer.from(state), Buffer.from(expectedState))) return oauthFailure(res, 'invalid_oauth_state');
+      res.clearCookie(deletionStateCookieName(provider), { path: '/api/auth' });
+      const stateMatches = (expected: string | undefined): boolean => Boolean(state && expected && state.length === expected.length && timingSafeEqual(Buffer.from(state), Buffer.from(expected)));
+      const isDeletionReauth = stateMatches(deletionState);
+      if (!isDeletionReauth && !stateMatches(expectedState)) return oauthFailure(res, 'invalid_oauth_state');
       const code = typeof req.query['code'] === 'string' ? req.query['code'] : undefined;
       if (!code) return oauthFailure(res, 'oauth_authorization_denied');
       try {
-        const user = await findOrCreateOAuthUser(await fetchOAuthProfile(provider, code));
+        const profile = await fetchOAuthProfile(provider, code);
+        if (isDeletionReauth) {
+          const grant = await new DeleteAccountUseCase(prisma).completeOAuthReauth(profile.provider, state!, profile.providerId);
+          if (!grant) return oauthFailure(res, 'account_deletion_reauth_failed');
+          res.cookie(deletionGrantCookie, grant, { ...oauthStateCookie, path: '/api/auth', maxAge: 5 * 60 * 1000 });
+          res.redirect(`${frontendUrl()}/settings?accountDeletion=reauthenticated`);
+          return;
+        }
+        const user = await findOrCreateOAuthUser(profile);
         const session = await issueTokens(prisma, user);
         res.cookie('yeap_refresh', session.refreshToken, refreshCookie).redirect(`${frontendUrl()}/dashboard`);
       } catch {
@@ -183,7 +202,7 @@ export class AuthController {
     const refreshToken = TokenService.generateRefreshToken();
     const result = await prisma.$transaction(async (db) => {
       const current = await db.refreshToken.findUnique({ where: { token: TokenService.hashRefreshToken(input.data.refreshToken) }, include: { user: true } });
-      if (!current || current.revoked || current.expiresAt <= new Date()) return null;
+      if (!current || current.user.deletedAt || current.revoked || current.expiresAt <= new Date()) return null;
       const revoked = await db.refreshToken.updateMany({ where: { id: current.id, revoked: false, expiresAt: { gt: new Date() } }, data: { revoked: true } });
       if (revoked.count !== 1) return null;
       await db.refreshToken.create({ data: { token: TokenService.hashRefreshToken(refreshToken), userId: current.userId, expiresAt: TokenService.refreshTokenExpiresAt() } });
@@ -193,7 +212,8 @@ export class AuthController {
       res.status(401).json({ success: false, error: 'Invalid or expired refresh token' });
       return;
     }
-    res.cookie('yeap_refresh', refreshToken, refreshCookie).json({ success: true, data: { accessToken: TokenService.signAccessToken(result.id, result.email), user: userResponse(result) } });
+    if (result.deletedAt) { res.status(401).json({ success: false, error: 'Invalid or expired refresh token' }); return; }
+    res.cookie('yeap_refresh', refreshToken, refreshCookie).json({ success: true, data: { accessToken: TokenService.signAccessToken(result.id, result.email, result.tokenVersion), user: userResponse(result) } });
   }
 
   static async logout(req: Request, res: Response): Promise<void> {
@@ -220,5 +240,43 @@ export class AuthController {
       }
       throw error;
     }
+  }
+
+  static async beginAccountDeletionReauth(req: Request, res: Response): Promise<void> {
+    if (!req.userId || !DeleteAccountReauthDto.safeParse(req.body ?? {}).success) { res.status(400).json({ success: false, error: 'Request could not be processed' }); return; }
+    try {
+      const { provider, state } = await new DeleteAccountUseCase(prisma).createOAuthReauth(req.userId);
+      res.cookie(deletionStateCookieName(provider), state, oauthStateCookie);
+      const clientId = process.env[provider === 'google' ? 'GOOGLE_CLIENT_ID' : 'GITHUB_CLIENT_ID'];
+      if (!configuredOAuthValue(clientId)) { res.status(503).json({ success: false, error: 'Request could not be processed' }); return; }
+      const url = new URL(provider === 'google' ? 'https://accounts.google.com/o/oauth2/v2/auth' : 'https://github.com/login/oauth/authorize');
+      url.searchParams.set('client_id', clientId);
+      url.searchParams.set('redirect_uri', callbackUrl(provider));
+      url.searchParams.set('response_type', 'code');
+      url.searchParams.set('scope', provider === 'google' ? 'openid email profile' : 'read:user user:email');
+      url.searchParams.set('state', state);
+      res.json({ success: true, data: { authorizationUrl: url.toString() } });
+    } catch {
+      res.status(400).json({ success: false, error: 'Request could not be processed' });
+    }
+  }
+
+  static async deleteAccount(req: Request, res: Response): Promise<void> {
+    const input = DeleteAccountDto.safeParse(req.body ?? {});
+    if (!req.userId || !input.success) { res.status(400).json({ success: false, error: 'Request could not be processed' }); return; }
+    const user = await prisma.user.findFirst({ where: { id: req.userId, deletedAt: null } });
+    if (!user) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
+    const context = { requestId: req.requestId ?? 'unknown', ipHash: clientIpHash(req), userAgent: req.header('user-agent') };
+    const useCase = new DeleteAccountUseCase(prisma);
+    const deleted = user.provider === AuthProvider.LOCAL
+      ? (input.data.password ? await useCase.deleteLocalAccount(user.id, input.data.password, context) : null)
+      : (!input.data.password ? await useCase.deleteOAuthAccount(user.id, readCookie(req, deletionGrantCookie), context) : null);
+    if (!deleted) { res.status(403).json({ success: false, error: 'Request could not be processed' }); return; }
+    res.clearCookie('yeap_refresh', { path: '/api/auth' });
+    res.clearCookie(deletionGrantCookie, { path: '/api/auth' });
+    logger.warn('[AccountDeletion] Account deleted', { userId: deleted.id, requestId: context.requestId, event: 'account_deletion_completed' });
+    void invalidateAccountCaches(deleted.id, context.requestId);
+    void sendAccountDeletionConfirmation(deleted.email, context.requestId);
+    res.status(204).end();
   }
 }

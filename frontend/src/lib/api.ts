@@ -89,9 +89,11 @@ export const api = {
     request<T>(path, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined }),
+  delete: <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'DELETE', body: body ? JSON.stringify(body) : undefined }),
 };
 
 export { ApiError };
 
-export interface AuthUser { id: string; email: string; name: string | null; leetcodeUsername?: string | null; }
+export interface AuthUser { id: string; email: string; name: string | null; leetcodeUsername?: string | null; provider: 'LOCAL' | 'GOOGLE' | 'GITHUB'; }
 export interface AuthResponse { success: boolean; data: { accessToken: string; user: AuthUser }; }

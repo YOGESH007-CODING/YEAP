@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { User, Code, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
@@ -7,12 +8,19 @@ import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 
 export function SettingsPage() {
-  const { user, token, signIn } = useAuth();
+  const { user, token, signIn, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [leetcodeUsername, setLeetcodeUsername] = useState(user?.leetcodeUsername || '');
   const [isEditing, setIsEditing] = useState(!user?.leetcodeUsername);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(searchParams.get('accountDeletion') === 'reauthenticated');
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.leetcodeUsername) {
@@ -50,6 +58,30 @@ export function SettingsPage() {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') { setDeleteError('Type DELETE to confirm.'); return; }
+    if (user?.provider === 'LOCAL' && !deletePassword) { setDeleteError('Enter your password to continue.'); return; }
+    setDeleting(true); setDeleteError(null);
+    try {
+      await api.delete<void>('/api/auth/delete-account', user?.provider === 'LOCAL' ? { password: deletePassword } : undefined);
+      await signOut();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Unable to delete account.');
+    } finally { setDeleting(false); }
+  };
+
+  const beginOAuthDeletionReauth = async () => {
+    setDeleting(true); setDeleteError(null);
+    try {
+      const response = await api.post<{ success: boolean; data: { authorizationUrl: string } }>('/api/auth/delete-account/reauth', {});
+      window.location.assign(response.data.authorizationUrl);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Unable to start reauthentication.');
+      setDeleting(false);
     }
   };
 
@@ -154,9 +186,31 @@ export function SettingsPage() {
           <p className="text-sm text-[#8A8F98] mb-4">These actions are permanent and cannot be undone.</p>
           <div className="flex flex-wrap gap-2">
             <Button variant="danger" disabled>Reset All Progress</Button>
-            <Button variant="danger" disabled>Delete Account</Button>
+            <Button variant="danger" onClick={() => { setDeleteOpen(true); setDeleteError(null); }}>Delete Account</Button>
           </div>
-          <p className="font-mono text-[10px] text-white/20 mt-3">Disabled until backend endpoints are built</p>
+          <p className="font-mono text-[10px] text-white/20 mt-3">Account deletion is permanent. Your personal progress and sessions will be removed.</p>
+
+          {deleteOpen && (
+            <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-red-300">Confirm account deletion</h3>
+              <p className="text-xs text-red-200/80">This signs you out everywhere and cannot be undone.</p>
+              {deleteError && <p role="alert" className="text-xs text-red-300">{deleteError}</p>}
+              {user?.provider === 'LOCAL' ? (
+                <Input label="Current password" type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} disabled={deleting} autoComplete="current-password" />
+              ) : (
+                <p className="text-xs text-red-200/80">First confirm your identity again with {user?.provider === 'GOOGLE' ? 'Google' : 'GitHub'}.</p>
+              )}
+              <Input label="Type DELETE to confirm" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} disabled={deleting} autoComplete="off" />
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" disabled={deleting} onClick={() => setDeleteOpen(false)}>Cancel</Button>
+                {user?.provider === 'LOCAL' || searchParams.get('accountDeletion') === 'reauthenticated' ? (
+                  <Button type="button" variant="danger" disabled={deleting || deleteConfirmation !== 'DELETE'} onClick={deleteAccount}>{deleting ? 'Deleting...' : 'Permanently Delete Account'}</Button>
+                ) : (
+                  <Button type="button" variant="danger" disabled={deleting} onClick={beginOAuthDeletionReauth}>{deleting ? 'Redirecting...' : 'Reauthenticate to Continue'}</Button>
+                )}
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </div>

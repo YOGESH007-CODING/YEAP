@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { AuthController } from '../controllers/AuthController';
 import { authValidation } from '../middleware/authValidation';
 import { authRateLimit } from '../middleware/authRateLimit';
+import { csrfProtection } from '../middleware/csrfProtection';
+import { accountDeletionRateLimit } from '../middleware/accountDeletionRateLimit';
 
 const router = Router();
 
@@ -17,5 +19,7 @@ router.get('/github/callback', authRateLimit, handle(AuthController.oauthCallbac
 router.post('/refresh', authRateLimit, handle(AuthController.refresh));
 router.post('/logout', handle(AuthController.logout));
 router.patch('/profile', authValidation, handle(AuthController.updateProfile));
+router.post('/delete-account/reauth', authValidation, csrfProtection, accountDeletionRateLimit, handle(AuthController.beginAccountDeletionReauth));
+router.delete('/delete-account', authValidation, csrfProtection, accountDeletionRateLimit, handle(AuthController.deleteAccount));
 
 export default router;

@@ -12,6 +12,7 @@ export interface AuthUser {
   email: string;
   name: string | null;
   leetcodeUsername?: string | null;
+  provider: 'LOCAL' | 'GOOGLE' | 'GITHUB';
 }
 
 export interface AuthContextType {
