@@ -125,7 +125,7 @@ export class AuthController {
       return;
     }
     try {
-      const user = await prisma.user.create({ data: { email, name: input.data.name, passwordHash: await bcrypt.hash(input.data.password, 12) } });
+      const user = await prisma.user.create({ data: { email, name: input.data.name, leetcodeUsername: input.data.leetcodeUsername, passwordHash: await bcrypt.hash(input.data.password, 12) } });
       const session = await issueTokens(prisma, user);
       res.cookie('yeap_refresh', session.refreshToken, refreshCookie).status(201).json({ success: true, data: { accessToken: session.accessToken, user: session.user } });
     } catch (error) {

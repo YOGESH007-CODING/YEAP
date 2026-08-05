@@ -12,6 +12,7 @@ export function LoginPage() {
   const navigate = useNavigate();
   const [isRegistering, setIsRegistering] = useState(false);
   const [name, setName] = useState('');
+  const [leetcodeUsername, setLeetcodeUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +30,7 @@ export function LoginPage() {
 
     try {
       const endpoint = isRegistering ? '/api/auth/register' : '/api/auth/login';
-      const body = isRegistering ? { email, password, name } : { email, password };
+      const body = isRegistering ? { email, password, name, leetcodeUsername } : { email, password };
       const res = await api.post<AuthResponse>(endpoint, body);
 
       signIn({
@@ -97,14 +98,10 @@ export function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {isRegistering && (
-              <Input
-                label="Full Name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Alex Smith"
-                autoComplete="name"
-              />
+              <>
+                <Input label="Full Name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Alex Smith" autoComplete="name" />
+                <Input label="LeetCode Username" type="text" value={leetcodeUsername} onChange={(e) => setLeetcodeUsername(e.target.value)} placeholder="your_leetcode_username" required autoComplete="off" />
+              </>
             )}
             <Input
               label="Email"

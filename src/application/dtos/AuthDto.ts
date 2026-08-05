@@ -10,6 +10,7 @@ export const RegisterDto = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().min(1).max(100).optional(),
+  leetcodeUsername: z.string().trim().min(1).max(100).regex(/^[A-Za-z0-9_-]+$/, 'Invalid LeetCode username'),
 });
 
 export const LoginDto = z.object({

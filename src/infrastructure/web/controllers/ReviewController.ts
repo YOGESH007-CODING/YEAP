@@ -141,12 +141,16 @@ export const ReviewController = {
     try {
       const dueItems = await progressRepository.findDueByUser(req.userId, 20);
       const allTracked = await progressRepository.findAllByUser(req.userId);
+      const bonusQuestions = dueItems.length < 5
+        ? await problemRepository.getUnseenProblems(req.userId, 5 - dueItems.length, ['google', 'amazon', 'apple', 'meta', 'netflix'])
+        : [];
 
       res.status(200).json({
         success: true,
         data: {
           count: dueItems.length,
           totalTracked: allTracked.length,
+          bonusQuestions,
           items: dueItems.map((item) => ({
             progressId: item.id,
             problem: item.problem,
