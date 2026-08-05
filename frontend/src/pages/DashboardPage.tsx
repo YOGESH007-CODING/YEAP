@@ -25,7 +25,15 @@ export function DashboardPage() {
   useEffect(() => { void loadDue(); }, []);
   async function loadDue(showLoading = true) {
     if (showLoading) setLoading(true);
-    try { const res = await api.get<DueResponse>('/api/review/due'); setDueItems(res.data.items); setBonusQuestions(res.data.bonusQuestions); setTotalTracked(res.data.totalTracked ?? res.data.items.length); }
+    try {
+      const res = await api.get<DueResponse>('/api/review/due');
+      const items = res.data.items ?? [];
+      setDueItems(items);
+      // Older backend deployments do not yet include bonusQuestions. Keep the
+      // dashboard functional while those instances are being rolled out.
+      setBonusQuestions(res.data.bonusQuestions ?? []);
+      setTotalTracked(res.data.totalTracked ?? items.length);
+    }
     catch (error) { console.error('Failed to load due items:', error); }
     finally { if (showLoading) setLoading(false); }
   }
