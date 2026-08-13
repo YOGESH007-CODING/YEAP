@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
 import { AuthProvider } from '@prisma/client';
-import { randomBytes, timingSafeEqual } from 'crypto';
+import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'crypto';
 import type { Request, Response } from 'express';
 import type { PrismaClient, User } from '@prisma/client';
-import { RegisterDto, LoginDto, RefreshDto, UpdateProfileDto, DeleteAccountDto, DeleteAccountReauthDto } from '../../../application/dtos/AuthDto';
+import { RegisterDto, LoginDto, RefreshDto, UpdateProfileDto, DeleteAccountDto, DeleteAccountReauthDto, VerifyEmailDto, ResendVerificationDto } from '../../../application/dtos/AuthDto';
 import { TokenService } from '../../../domain/services/TokenService';
 import { prisma } from '../../database/prismaClient';
 import { DeleteAccountUseCase } from '../../../application/use-cases/DeleteAccountUseCase';
@@ -11,16 +11,34 @@ import { sendAccountDeletionConfirmation } from '../../external/AccountDeletionE
 import { clientIpHash } from '../middleware/requestContext';
 import { logger } from '../../../shared/utils/logger';
 import { invalidateAccountCaches } from '../../external/AccountDeletionCacheService';
+import { sendEmailVerificationCode } from '../../external/EmailVerificationService';
 
 type PublicUser = Pick<User, 'id' | 'email' | 'name' | 'leetcodeUsername' | 'provider' | 'tokenVersion'>;
 type OAuthProviderName = 'google' | 'github';
 type OAuthProfile = { email: string; name: string | null; provider: AuthProvider; providerId: string };
 
 const isProd = process.env['NODE_ENV'] === 'production';
+const VERIFICATION_CODE_TTL_MS = 10 * 60 * 1000;
+const VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
+const MAX_VERIFICATION_ATTEMPTS = 5;
 const cookieSameSite: 'none' | 'lax' = isProd ? 'none' : 'lax';
 const refreshCookie = { httpOnly: true, secure: isProd, sameSite: cookieSameSite, path: '/api/auth', maxAge: 30 * 24 * 60 * 60 * 1000 };
 const oauthStateCookie = { httpOnly: true, secure: isProd, sameSite: cookieSameSite, path: '/api/auth', maxAge: 10 * 60 * 1000 };
 const userResponse = (user: PublicUser) => ({ id: user.id, email: user.email, name: user.name, leetcodeUsername: user.leetcodeUsername, provider: user.provider });
+
+const verificationSecret = (): string => {
+  const secret = process.env['EMAIL_VERIFICATION_SECRET'] ?? process.env['JWT_SECRET'];
+  if (!secret || secret.startsWith('your_')) throw new Error('Email verification is not configured');
+  return secret;
+};
+
+const verificationCodeHash = (email: string, code: string): string =>
+  createHmac('sha256', verificationSecret()).update(`${email}:${code}`).digest('hex');
+
+const createVerificationCode = (): string => String(randomInt(100_000, 1_000_000));
+
+const safeHashEquals = (left: string, right: string): boolean =>
+  left.length === right.length && timingSafeEqual(Buffer.from(left), Buffer.from(right));
 
 const invalidBody = (res: Response, error: { flatten: () => unknown }): void => {
   res.status(400).json({ success: false, error: 'Invalid request body', details: error.flatten() });
@@ -120,20 +138,116 @@ export class AuthController {
     const input = RegisterDto.safeParse(req.body);
     if (!input.success) return invalidBody(res, input.error);
     const email = input.data.email.toLowerCase();
+    // This intentionally does not disclose whether an account already exists.
+    // It makes automated email enumeration substantially harder.
     if (await prisma.user.findUnique({ where: { email } })) {
-      res.status(409).json({ success: false, error: 'An account with this email already exists' });
+      res.status(202).json({ success: true, data: { verificationRequired: true } });
       return;
     }
     try {
-      const user = await prisma.user.create({ data: { email, name: input.data.name, leetcodeUsername: input.data.leetcodeUsername, passwordHash: await bcrypt.hash(input.data.password, 12) } });
+      const now = new Date();
+      const existing = await prisma.emailVerification.findUnique({ where: { email } });
+      if (existing && existing.lastSentAt.getTime() + VERIFICATION_RESEND_COOLDOWN_MS > now.getTime()) {
+        res.status(429).json({ success: false, error: 'Please wait before requesting another verification code.' });
+        return;
+      }
+
+      const code = createVerificationCode();
+      await prisma.emailVerification.upsert({
+        where: { email },
+        create: {
+          email,
+          passwordHash: await bcrypt.hash(input.data.password, 12),
+          name: input.data.name,
+          leetcodeUsername: input.data.leetcodeUsername,
+          codeHash: verificationCodeHash(email, code),
+          expiresAt: new Date(now.getTime() + VERIFICATION_CODE_TTL_MS),
+          attempts: 0,
+          lastSentAt: now,
+        },
+        update: {
+          passwordHash: await bcrypt.hash(input.data.password, 12),
+          name: input.data.name,
+          leetcodeUsername: input.data.leetcodeUsername,
+          codeHash: verificationCodeHash(email, code),
+          expiresAt: new Date(now.getTime() + VERIFICATION_CODE_TTL_MS),
+          attempts: 0,
+          lastSentAt: now,
+        },
+      });
+      await sendEmailVerificationCode(email, code);
+      res.status(202).json({ success: true, data: { verificationRequired: true } });
+    } catch (error) {
+      logger.error('[EmailVerification] Could not start verification', { error: error instanceof Error ? error.message : String(error) });
+      res.status(503).json({ success: false, error: 'Unable to send a verification code. Please try again later.' });
+    }
+  }
+
+  static async resendVerificationCode(req: Request, res: Response): Promise<void> {
+    const input = ResendVerificationDto.safeParse(req.body);
+    if (!input.success) return invalidBody(res, input.error);
+    const email = input.data.email.toLowerCase();
+    const pending = await prisma.emailVerification.findUnique({ where: { email } });
+    // Generic response prevents this endpoint from becoming an account-enumeration oracle.
+    if (!pending || await prisma.user.findUnique({ where: { email } })) {
+      res.status(202).json({ success: true, data: { verificationRequired: true } });
+      return;
+    }
+    const now = new Date();
+    if (pending.lastSentAt.getTime() + VERIFICATION_RESEND_COOLDOWN_MS > now.getTime()) {
+      res.status(429).json({ success: false, error: 'Please wait before requesting another verification code.' });
+      return;
+    }
+    try {
+      const code = createVerificationCode();
+      await prisma.emailVerification.update({
+        where: { id: pending.id },
+        data: { codeHash: verificationCodeHash(email, code), expiresAt: new Date(now.getTime() + VERIFICATION_CODE_TTL_MS), attempts: 0, lastSentAt: now },
+      });
+      await sendEmailVerificationCode(email, code);
+    } catch (error) {
+      logger.error('[EmailVerification] Could not resend verification code', { error: error instanceof Error ? error.message : String(error) });
+      res.status(503).json({ success: false, error: 'Unable to send a verification code. Please try again later.' });
+      return;
+    }
+    res.status(202).json({ success: true, data: { verificationRequired: true } });
+  }
+
+  static async verifyEmail(req: Request, res: Response): Promise<void> {
+    const input = VerifyEmailDto.safeParse(req.body);
+    if (!input.success) return invalidBody(res, input.error);
+    const email = input.data.email.toLowerCase();
+    try {
+      const user = await prisma.$transaction(async (db) => {
+        const rows = await db.$queryRaw<Array<{ id: string }>>`SELECT id FROM email_verifications WHERE email = ${email} FOR UPDATE`;
+        if (!rows[0]) return null;
+        const pending = await db.emailVerification.findUnique({ where: { id: rows[0].id } });
+        if (!pending || pending.expiresAt <= new Date() || pending.attempts >= MAX_VERIFICATION_ATTEMPTS) return null;
+
+        if (!safeHashEquals(pending.codeHash, verificationCodeHash(email, input.data.code))) {
+          await db.emailVerification.update({ where: { id: pending.id }, data: { attempts: { increment: 1 } } });
+          return null;
+        }
+
+        const created = await db.user.create({
+          data: { email: pending.email, name: pending.name, leetcodeUsername: pending.leetcodeUsername, passwordHash: pending.passwordHash },
+        });
+        await db.emailVerification.delete({ where: { id: pending.id } });
+        return created;
+      });
+      if (!user) {
+        res.status(400).json({ success: false, error: 'Invalid, expired, or exhausted verification code.' });
+        return;
+      }
       const session = await issueTokens(prisma, user);
       res.cookie('yeap_refresh', session.refreshToken, refreshCookie).status(201).json({ success: true, data: { accessToken: session.accessToken, user: session.user } });
     } catch (error) {
       if ((error as { code?: string }).code === 'P2002') {
-        res.status(409).json({ success: false, error: 'An account with this email already exists' });
+        res.status(400).json({ success: false, error: 'Verification could not be completed.' });
         return;
       }
-      throw error;
+      logger.error('[EmailVerification] Verification failed', { error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ success: false, error: 'Verification could not be completed.' });
     }
   }
 

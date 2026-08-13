@@ -35,6 +35,25 @@ model User {
   @@index([deletedAt])
 }
 
+// Registration details remain here until the email owner proves control of the
+// inbox. This prevents unverified accounts from receiving sessions or tokens.
+model EmailVerification {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  passwordHash     String
+  name             String?
+  leetcodeUsername String?
+  codeHash         String
+  expiresAt        DateTime
+  attempts         Int      @default(0)
+  lastSentAt       DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("email_verifications")
+}
+
 // One-time OAuth reauthentication grants for account deletion. Secrets are
 // stored only as SHA-256 hashes and every grant is single-use.
 model AccountDeletionReauth {
