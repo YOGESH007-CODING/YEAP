@@ -243,7 +243,12 @@ export class AuthController {
       res.cookie('yeap_refresh', session.refreshToken, refreshCookie).status(201).json({ success: true, data: { accessToken: session.accessToken, user: session.user } });
     } catch (error) {
       if ((error as { code?: string }).code === 'P2002') {
-        res.status(400).json({ success: false, error: 'Verification could not be completed.' });
+        const fields = (error as { meta?: { target?: string[] } }).meta?.target ?? [];
+        if (fields.includes('leetcodeUsername')) {
+          res.status(409).json({ success: false, error: 'This LeetCode username is already linked to another account.' });
+          return;
+        }
+        res.status(409).json({ success: false, error: 'An account with these details already exists.' });
         return;
       }
       logger.error('[EmailVerification] Verification failed', { error: error instanceof Error ? error.message : String(error) });

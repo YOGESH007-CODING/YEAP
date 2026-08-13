@@ -12,6 +12,7 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:studio": "npx prisma studio",
     "prisma:generate": "npx prisma generate",
+    "problems:sync": "ts-node scripts/fetchLatestProblems.ts",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch"
   },

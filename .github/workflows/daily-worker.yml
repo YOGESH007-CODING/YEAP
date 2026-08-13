@@ -27,6 +27,12 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
+      - name: Sync newly published LeetCode problems
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          LEETCODE_GRAPHQL_URL: ${{ vars.LEETCODE_GRAPHQL_URL }}
+        run: npm run problems:sync
+
       - name: Run Daily Queue Worker Batch
         env:
           NODE_ENV: production

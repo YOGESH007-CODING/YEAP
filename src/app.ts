@@ -11,6 +11,7 @@ import { logger } from './shared/utils/logger';
 import reviewRoutes from './infrastructure/web/routes/reviewRoutes';
 import problemRoutes from './infrastructure/web/routes/problemRoutes';
 import authRoutes from './infrastructure/web/routes/authRoutes';
+import trackerRoutes from './infrastructure/web/routes/trackerRoutes';
 import helmet from 'helmet';
 import { requestContext } from './infrastructure/web/middleware/requestContext';
 
@@ -63,6 +64,7 @@ app.use(helmet({
   app.use('/api/auth', authRoutes);
   app.use('/api/review', reviewRoutes);
   app.use('/api/problems', problemRoutes);
+  app.use('/api/trackers', trackerRoutes);
 
   // ── 404 Handler ───────────────────────────────────────────────────────
   app.use((_req: Request, res: Response) => {

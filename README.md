@@ -85,6 +85,14 @@ All endpoints below except `/api/auth/*` require `Authorization: Bearer <accessT
 
 `POST /api/auth/refresh` and `POST /api/auth/logout` accept `{ "refreshToken" }`. Configure `JWT_SECRET` (32+ random characters) and `GOOGLE_CLIENT_ID` before use.
 
+### Problem catalogue synchronization
+
+`npm run problems:sync` checks the 100 newest public LeetCode questions and
+inserts any new problem slugs into Prisma without duplicating existing records.
+The GitHub Actions daily worker runs this before compiling daily review queues.
+It requires the `DATABASE_URL` GitHub secret; `LEETCODE_GRAPHQL_URL` is optional
+and falls back to `https://leetcode.com/graphql`.
+
 ### `POST /api/review/submit`
 Submit a completed review.
 

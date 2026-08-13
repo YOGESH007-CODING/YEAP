@@ -29,10 +29,32 @@ model User {
   // Relations
   problemProgresses ProblemProgress[]
   refreshTokens     RefreshToken[]
+  companyTrackers   CompanyTracker[]
 
   @@map("users")
   @@unique([provider, providerId])
   @@index([deletedAt])
+}
+
+// Per-user preparation plans. Progress is derived from ProblemProgress records
+// and company-tagged Problems, so tracker state never duplicates SRS state.
+model CompanyTracker {
+  id                String   @id @default(cuid())
+  userId            String
+  companyName       String
+  dailySolveGoal    Int      @default(3)
+  dailyRevisionGoal Int      @default(5)
+  weeklySolveGoal   Int      @default(15)
+  isActive          Boolean  @default(true)
+  lastActivityAt    DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyName])
+  @@index([userId, isActive])
+  @@map("company_trackers")
 }
 
 // Registration details remain here until the email owner proves control of the
