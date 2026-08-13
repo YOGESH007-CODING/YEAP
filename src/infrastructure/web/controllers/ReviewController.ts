@@ -106,19 +106,19 @@ export const ReviewController = {
         message.includes('verification failed') ||
         message.includes('not linked')
       ) {
-        res.status(400).json({ success: false, error: message });
+        res.status(400).json({ success: false, error: 'Submission verification could not be completed.' });
         return;
       }
 
       // Domain errors (e.g., "Problem not found") → 404
       if (message.includes('not found')) {
-        res.status(404).json({ success: false, error: message });
+        res.status(404).json({ success: false, error: 'Requested problem was not found.' });
         return;
       }
 
       // Range errors (e.g., invalid quality score) → 400
       if (error instanceof RangeError) {
-        res.status(400).json({ success: false, error: message });
+        res.status(400).json({ success: false, error: 'Invalid review data.' });
         return;
       }
 
@@ -249,12 +249,12 @@ export const ReviewController = {
       logger.error(`[ReviewController] sync error: ${message}`);
 
       if (message.includes('not linked') || message.includes('not found')) {
-        res.status(400).json({ success: false, error: message });
+        res.status(400).json({ success: false, error: 'LeetCode account setup could not be verified.' });
         return;
       }
 
       if (message.includes('LeetCode API')) {
-        res.status(502).json({ success: false, error: message });
+        res.status(502).json({ success: false, error: 'LeetCode is temporarily unavailable. Please try again later.' });
         return;
       }
 
@@ -304,12 +304,12 @@ export const ReviewController = {
       logger.error(`[ReviewController] report error: ${message}`);
 
       if (message.includes('not found')) {
-        res.status(404).json({ success: false, error: message });
+        res.status(404).json({ success: false, error: 'Requested problem was not found.' });
         return;
       }
 
       if (error instanceof RangeError) {
-        res.status(400).json({ success: false, error: message });
+        res.status(400).json({ success: false, error: 'Invalid report data.' });
         return;
       }
 

@@ -78,7 +78,7 @@ export class LeetCodeGraphQLClient implements ILeetCodeClient {
 
   /**
    * Verifies that a user has an accepted submission for a given problem.
-   * Checks up to the 20 most recent accepted submissions.
+   * Checks up to the 100 most recent accepted submissions.
    */
   async verifyUserSubmission(
     leetcodeUsername: string,
@@ -91,7 +91,7 @@ export class LeetCodeGraphQLClient implements ILeetCodeClient {
 
       const response = await this.executeQuery<RecentSubmissionsData>(
         RECENT_SUBMISSIONS_QUERY,
-        { username: leetcodeUsername, limit: 20 },
+        { username: leetcodeUsername, limit: 100 },
       );
 
       const submissions = response.data?.recentAcSubmissionList ?? [];

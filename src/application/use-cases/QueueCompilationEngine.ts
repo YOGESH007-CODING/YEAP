@@ -37,6 +37,9 @@ const FAANG_COMPANIES = ['Amazon', 'Google', 'Meta', 'Microsoft', 'Apple'];
 /** Items with EF below this are considered "critical" and flagged in the bundle. */
 const CRITICAL_EF_THRESHOLD = 1.8;
 
+/** Maximum number of users processed concurrently by a single daily worker. */
+const USER_PROCESSING_CONCURRENCY = 25;
+
 // ─── Dependency Injection Contract ────────────────────────────────────────────
 
 export interface QueueCompilationEngineDeps {
@@ -86,18 +89,9 @@ export class QueueCompilationEngine {
     const users = await this.userRepo.findAll();
     logger.info(`[QueueCompilationEngine] Checking queues for ${users.length} users.`);
 
-    for (const user of users) {
-      try {
-        await this.seedMinimumQueue(user.id);
-        const items = await this.progressRepo.findDueByUser(user.id, BACKLOG_SOFT_CAP * 2);
-        if (items.length > 0) {
-          await this.processUserQueue(user.id, items, result);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error(`[QueueCompilationEngine] Failed for user ${user.id}: ${message}`);
-        result.failures.push({ userId: user.id, error: message });
-      }
+    for (let start = 0; start < users.length; start += USER_PROCESSING_CONCURRENCY) {
+      const batch = users.slice(start, start + USER_PROCESSING_CONCURRENCY);
+      await Promise.all(batch.map((user) => this.processUser(user.id, result)));
     }
 
     logger.info(
@@ -111,6 +105,20 @@ export class QueueCompilationEngine {
   }
 
   // ─── Private Helpers ───────────────────────────────────────────────────────
+
+  private async processUser(userId: string, result: CompilationResult): Promise<void> {
+    try {
+      await this.seedMinimumQueue(userId);
+      const items = await this.progressRepo.findDueByUser(userId, BACKLOG_SOFT_CAP * 2);
+      if (items.length > 0) {
+        await this.processUserQueue(userId, items, result);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[QueueCompilationEngine] Failed for user ${userId}: ${message}`);
+      result.failures.push({ userId, error: message });
+    }
+  }
 
   /**
    * Adds random unseen FAANG problems only until a user has five tracked

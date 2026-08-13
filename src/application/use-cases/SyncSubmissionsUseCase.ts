@@ -23,7 +23,7 @@ import { logger } from '../../shared/utils/logger';
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 /** Default number of recent AC submissions to fetch from LeetCode. */
-const DEFAULT_FETCH_LIMIT = 50;
+const DEFAULT_FETCH_LIMIT = 100;
 
 // ─── Dependency Injection Contract ────────────────────────────────────────────
 
