@@ -70,34 +70,34 @@ function TopicCell({ topic }: { topic: TopicMastery }) {
 }
 
 export function TopicHeatmap({ topics, loading = false }: TopicHeatmapProps) {
-  const visibleTopics = topics.slice(0, 8);
+  const visibleTopics = topics.slice(0, 6);
   const average = visibleTopics.length
     ? Math.round(visibleTopics.reduce((sum, topic) => sum + topic.masteryScore, 0) / visibleTopics.length)
     : 0;
 
   return (
-    <Card className="p-5">
+    <Card className="p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <BarChart3 size={15} className="text-[#8B94E5]" />
             <h3 className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98]">Topic mastery</h3>
           </div>
-          <p className="mt-1 text-xs text-[#8A8F98]">A weighted view of your recall by pattern.</p>
+          <p className="mt-1 text-xs text-[#8A8F98]">Recall by pattern.</p>
         </div>
         {visibleTopics.length > 0 && <span className="font-mono text-[10px] uppercase tracking-widest text-white/35">{average}% avg</span>}
       </div>
 
       {loading ? (
-        <div className="mt-5 grid grid-cols-2 gap-2" aria-label="Loading topic mastery">
+        <div className="mt-4 grid grid-cols-2 gap-2" aria-label="Loading topic mastery">
           {[0, 1, 2, 3].map((item) => <div key={item} className="h-[74px] animate-pulse rounded-xl border border-white/[0.05] bg-white/[0.025]" />)}
         </div>
       ) : visibleTopics.length > 0 ? (
         <>
-          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {visibleTopics.map((topic) => <TopicCell key={topic.topicName} topic={topic} />)}
           </div>
-          <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-3 font-mono text-[10px] tracking-wide text-white/35">
+          <div className="mt-3 flex items-center justify-between border-t border-white/[0.06] pt-3 font-mono text-[10px] tracking-wide text-white/35">
             <span className="flex items-center gap-1.5"><Info size={11} /> Hover a topic for detail</span>
             <span>{topics.length > visibleTopics.length ? `${topics.length - visibleTopics.length} more topics` : 'Updated after reviews'}</span>
           </div>
