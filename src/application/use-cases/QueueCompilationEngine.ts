@@ -1,10 +1,10 @@
-/**
+ /**
  * src/application/use-cases/QueueCompilationEngine.ts
  *
  * Builds the daily review queue for all users:
  *   1. Queries all due progress items (dueDate <= now)
  *   2. Groups by user
- *   3. Sorts each user's items by EF ascending (sinking EF = most critical)
+ *   3. Prioritizes due items using EF and weakest-topic mastery
  *   4. Applies a strict soft-cap of MAX 5 items per user
  *   5. Sends the compiled bundle to the notification provider
  *
@@ -47,7 +47,7 @@ export interface QueueCompilationEngineDeps {
   problemRepository: IProblemRepository;
   userRepository: IUserRepository;
   notificationProvider: INotificationProvider;
-  /** Returns topic mastery by topic name; absent data is intentionally neutral (50). */
+  /** Optional so existing callers retain neutral (50) mastery during cold start. */
   masteryLookup?: (userId: string, topics: string[]) => Promise<Map<string, number>>;
 }
 
@@ -113,7 +113,9 @@ export class QueueCompilationEngine {
   private async processUser(userId: string, result: CompilationResult): Promise<void> {
     try {
       await this.seedMinimumQueue(userId);
-      const items = await this.progressRepo.findDueByUser(userId, BACKLOG_SOFT_CAP * 2);
+      // Priority must be calculated before capping: pre-filtering by EF would
+      // prevent a weak-topic item farther down the EF list from surfacing.
+      const items = await this.progressRepo.findDueByUser(userId, 0);
       if (items.length > 0) {
         await this.processUserQueue(userId, items, result);
       }
@@ -154,15 +156,18 @@ export class QueueCompilationEngine {
     rawItems: DueProgressWithProblem[],
     result: CompilationResult,
   ): Promise<void> {
-    const allTopics = [...new Set(rawItems.flatMap((item) => item.problem.topicTags))];
-    const mastery = this.masteryLookup ? await this.masteryLookup(userId, allTopics) : new Map<string, number>();
-    const priority = (item: DueProgressWithProblem): number => {
-      // EF is bounded by SM-2 at 1.3; 2.5 is its normal starting point.
+    const topics = [...new Set(rawItems.flatMap((item) => item.problem.topicTags))];
+    const mastery = this.masteryLookup ? await this.masteryLookup(userId, topics) : new Map<string, number>();
+    const priorityScore = (item: DueProgressWithProblem): number => {
+      // SM-2's practical EF range is 1.3–2.5. Clamp defensive outliers.
       const normalizedEF = Math.max(0, Math.min(1, (item.easinessFactor - 1.3) / 1.2));
-      const weakestMastery = Math.min(...item.problem.topicTags.map((topic) => mastery.get(topic) ?? 50));
+      const topicMasteries = item.problem.topicTags.map((topic) => mastery.get(topic) ?? 50);
+      const weakestMastery = topicMasteries.length ? Math.min(...topicMasteries) : 50;
       return (1 - normalizedEF) * 0.6 + (1 - weakestMastery / 100) * 0.4;
     };
-    const sorted = [...rawItems].sort((a, b) => priority(b) - priority(a));
+    const sorted = [...rawItems].sort((a, b) =>
+      priorityScore(b) - priorityScore(a) || a.dueDate.getTime() - b.dueDate.getTime(),
+    );
 
     // Apply strict backlog soft-cap
     const capped = sorted.slice(0, BACKLOG_SOFT_CAP);
@@ -214,7 +219,7 @@ export class QueueCompilationEngine {
     }
 
     const allReviewItems = [...reviewItems, ...bonusItems];
-    const criticalCount = allReviewItems.filter(
+    const criticalCount = reviewItems.filter(
       (i) => i.easinessFactor < CRITICAL_EF_THRESHOLD,
     ).length;
 

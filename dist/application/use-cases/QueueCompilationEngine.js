@@ -1,19 +1,19 @@
 "use strict";
 /**
- * src/application/use-cases/QueueCompilationEngine.ts
- *
- * Builds the daily review queue for all users:
- *   1. Queries all due progress items (dueDate <= now)
- *   2. Groups by user
- *   3. Sorts each user's items by EF ascending (sinking EF = most critical)
- *   4. Applies a strict soft-cap of MAX 5 items per user
- *   5. Sends the compiled bundle to the notification provider
- *
- * SOLID Compliance:
- *   - SRP: Only handles queue compilation and dispatch.
- *   - OCP: New notification providers can be swapped without changing this class.
- *   - DIP: Depends on interfaces only — never on Prisma or Telegram/SendGrid directly.
- */
+* src/application/use-cases/QueueCompilationEngine.ts
+*
+* Builds the daily review queue for all users:
+*   1. Queries all due progress items (dueDate <= now)
+*   2. Groups by user
+*   3. Prioritizes due items using EF and weakest-topic mastery
+*   4. Applies a strict soft-cap of MAX 5 items per user
+*   5. Sends the compiled bundle to the notification provider
+*
+* SOLID Compliance:
+*   - SRP: Only handles queue compilation and dispatch.
+*   - OCP: New notification providers can be swapped without changing this class.
+*   - DIP: Depends on interfaces only — never on Prisma or Telegram/SendGrid directly.
+*/
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.QueueCompilationEngine = void 0;
 const logger_1 = require("../../shared/utils/logger");
@@ -64,7 +64,9 @@ class QueueCompilationEngine {
     async processUser(userId, result) {
         try {
             await this.seedMinimumQueue(userId);
-            const items = await this.progressRepo.findDueByUser(userId, BACKLOG_SOFT_CAP * 2);
+            // Priority must be calculated before capping: pre-filtering by EF would
+            // prevent a weak-topic item farther down the EF list from surfacing.
+            const items = await this.progressRepo.findDueByUser(userId, 0);
             if (items.length > 0) {
                 await this.processUserQueue(userId, items, result);
             }
@@ -92,15 +94,16 @@ class QueueCompilationEngine {
             `for user ${userId} (${tracked.length + unseen.length}/${MINIMUM_TRACKED_PROBLEMS} tracked).`);
     }
     async processUserQueue(userId, rawItems, result) {
-        const allTopics = [...new Set(rawItems.flatMap((item) => item.problem.topicTags))];
-        const mastery = this.masteryLookup ? await this.masteryLookup(userId, allTopics) : new Map();
-        const priority = (item) => {
-            // EF is bounded by SM-2 at 1.3; 2.5 is its normal starting point.
+        const topics = [...new Set(rawItems.flatMap((item) => item.problem.topicTags))];
+        const mastery = this.masteryLookup ? await this.masteryLookup(userId, topics) : new Map();
+        const priorityScore = (item) => {
+            // SM-2's practical EF range is 1.3–2.5. Clamp defensive outliers.
             const normalizedEF = Math.max(0, Math.min(1, (item.easinessFactor - 1.3) / 1.2));
-            const weakestMastery = Math.min(...item.problem.topicTags.map((topic) => mastery.get(topic) ?? 50));
+            const topicMasteries = item.problem.topicTags.map((topic) => mastery.get(topic) ?? 50);
+            const weakestMastery = topicMasteries.length ? Math.min(...topicMasteries) : 50;
             return (1 - normalizedEF) * 0.6 + (1 - weakestMastery / 100) * 0.4;
         };
-        const sorted = [...rawItems].sort((a, b) => priority(b) - priority(a));
+        const sorted = [...rawItems].sort((a, b) => priorityScore(b) - priorityScore(a) || a.dueDate.getTime() - b.dueDate.getTime());
         // Apply strict backlog soft-cap
         const capped = sorted.slice(0, BACKLOG_SOFT_CAP);
         // Fetch user profile for notification targeting
@@ -141,7 +144,7 @@ class QueueCompilationEngine {
             }
         }
         const allReviewItems = [...reviewItems, ...bonusItems];
-        const criticalCount = allReviewItems.filter((i) => i.easinessFactor < CRITICAL_EF_THRESHOLD).length;
+        const criticalCount = reviewItems.filter((i) => i.easinessFactor < CRITICAL_EF_THRESHOLD).length;
         // Build the daily bundle
         const bundle = {
             userId,

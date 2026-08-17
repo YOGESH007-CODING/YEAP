@@ -90,3 +90,39 @@ describe('QueueCompilationEngine minimum queue seeding', () => {
     expect(problemRepo.getUnseenProblems).not.toHaveBeenCalled();
   });
 });
+
+describe('QueueCompilationEngine priority and critical counts', () => {
+  it('promotes the weakest-topic due item ahead of a stronger topic with the same EF', async () => {
+    const weak = makeProgress('weak');
+    weak.problem.topicTags = ['Graph'];
+    const strong = makeProgress('strong');
+    strong.problem.topicTags = ['Array'];
+    const notificationProvider = { sendDailyBundle: jest.fn().mockResolvedValue({ success: true }) };
+    const engine = new QueueCompilationEngine({
+      progressRepository: { findAllByUser: jest.fn().mockResolvedValue([weak, strong]), findDueByUser: jest.fn().mockResolvedValue([strong, weak]), findOrCreate: jest.fn() } as never,
+      problemRepository: { getUnseenProblems: jest.fn().mockResolvedValue([]) } as never,
+      userRepository: { findAll: jest.fn().mockResolvedValue([{ id: 'user-1' }]), findById: jest.fn().mockResolvedValue({ id: 'user-1', email: 'user@example.com' }) } as never,
+      notificationProvider,
+      masteryLookup: jest.fn().mockResolvedValue(new Map([['Graph', 10], ['Array', 90]])),
+    });
+
+    await engine.execute();
+
+    const bundle = notificationProvider.sendDailyBundle.mock.calls[0][0];
+    expect(bundle.reviewItems[0].problemSlug).toBe('problem-weak');
+  });
+
+  it('does not count new challenges as critical reviews', async () => {
+    const notificationProvider = { sendDailyBundle: jest.fn().mockResolvedValue({ success: true }) };
+    const engine = new QueueCompilationEngine({
+      progressRepository: { findAllByUser: jest.fn().mockResolvedValue([makeProgress('one')]), findDueByUser: jest.fn().mockResolvedValue([makeProgress('one')]), findOrCreate: jest.fn() } as never,
+      problemRepository: { getUnseenProblems: jest.fn().mockResolvedValue([makeProblem('bonus-1'), makeProblem('bonus-2'), makeProblem('bonus-3'), makeProblem('bonus-4')]) } as never,
+      userRepository: { findAll: jest.fn().mockResolvedValue([{ id: 'user-1' }]), findById: jest.fn().mockResolvedValue({ id: 'user-1', email: 'user@example.com' }) } as never,
+      notificationProvider,
+    });
+
+    await engine.execute();
+
+    expect(notificationProvider.sendDailyBundle.mock.calls[0][0].criticalCount).toBe(0);
+  });
+});

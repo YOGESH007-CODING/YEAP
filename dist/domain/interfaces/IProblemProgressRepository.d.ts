@@ -48,7 +48,8 @@ export interface IProblemProgressRepository {
     /**
      * Fetches all due items for a specific user where dueDate <= now.
      * Uses the DB index on dueDate for efficient queries.
-     * Results sorted by easinessFactor ASC (sinking EF = most critical first).
+     * A limit of 0 returns the complete due backlog, used when the caller must
+     * apply an in-memory priority rule before capping results.
      */
     findDueByUser(userId: string, limit: number): Promise<DueProgressWithProblem[]>;
     /**

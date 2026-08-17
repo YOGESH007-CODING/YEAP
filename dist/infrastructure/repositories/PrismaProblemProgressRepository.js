@@ -80,8 +80,8 @@ class PrismaProblemProgressRepository {
                     },
                 },
             },
-            orderBy: { easinessFactor: 'asc' }, // Sinking EF first = most critical
-            take: limit,
+            orderBy: { dueDate: 'asc' },
+            ...(limit > 0 ? { take: limit } : {}),
         });
         return records.map((r) => ({
             ...toDto(r),
