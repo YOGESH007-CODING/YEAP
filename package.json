@@ -4,7 +4,7 @@
   "description": "YEAP – Your Early AM Practice: LeetCode Spaced Repetition System Backend",
   "main": "dist/server.js",
   "scripts": {
-     "postinstall": "prisma generate",
+    "postinstall": "prisma generate",
     "build": "prisma generate && tsc",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "start": "node dist/server.js",
@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
+    "@types/react": "^19.2.18",
+    "@vercel/og": "^1.0.1",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.78.0",
     "cors": "^2.8.5",
@@ -27,6 +29,7 @@
     "helmet": "^8.3.0",
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.3",
+    "react": "^19.2.8",
     "resend": "^6.17.1",
     "winston": "^3.13.0",
     "zod": "^3.23.8"

@@ -30,6 +30,13 @@ model User {
   problemProgresses ProblemProgress[]
   refreshTokens     RefreshToken[]
   companyTrackers   CompanyTracker[]
+  mistakes          UserMistake[]
+  topicMasteries    UserTopicMastery[]
+  notes             UserNote[]
+  streak            UserStreak?
+  shareToken        String?           @unique
+  shareEnabled      Boolean           @default(false)
+  shareTrackerId    String?
 
   @@map("users")
   @@unique([provider, providerId])
@@ -121,6 +128,8 @@ model Problem {
 
   // Relations
   progresses  ProblemProgress[]
+  mistakes    UserMistake[]
+  notes       UserNote[]
 
   @@index([companyTags], type: Gin)
   @@index([topicTags], type: Gin)
@@ -166,6 +175,85 @@ enum AuthProvider {
   LOCAL
   GOOGLE
   GITHUB
+}
+
+enum MistakeType {
+  LOGIC_ERROR
+  EDGE_CASE
+  WRONG_APPROACH
+  TIME_COMPLEXITY
+  MISREAD_PROBLEM
+  FORGOT_PATTERN
+  SYNTAX_SLIP
+}
+
+model UserMistake {
+  id              String      @id @default(cuid())
+  userId          String
+  problemId       String
+  topicName       String
+  mistakeType     MistakeType
+  description     String?
+  createdAt       DateTime    @default(now())
+  resolvedAt      DateTime?
+  recurrenceCount Int         @default(1)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, problemId, mistakeType])
+  @@index([userId, topicName])
+  @@map("user_mistakes")
+}
+
+model UserTopicMastery {
+  id              String   @id @default(cuid())
+  userId          String
+  topicName       String
+  masteryScore    Float    @default(0)
+  totalAttempts   Int      @default(0)
+  correctAttempts Int      @default(0)
+  mistakeCount    Int      @default(0)
+  lastPracticedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicName])
+  @@index([userId, masteryScore])
+  @@map("user_topic_masteries")
+}
+
+model UserNote {
+  id            String   @id @default(cuid())
+  userId        String
+  problemId     String
+  noteText      String
+  importantFlag Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem Problem @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, problemId])
+  @@index([userId, importantFlag])
+  @@map("user_notes")
+}
+
+model UserStreak {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  currentStreak      Int      @default(0)
+  longestStreak      Int      @default(0)
+  lastStreakDate     DateTime?
+  streakSafeToday    Boolean  @default(false)
+  freezesAvailable   Int      @default(1)
+  freezeRefreshedAt  DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_streaks")
 }
 
 // ─── RefreshToken Model ──────────────────────────────────────────────────────

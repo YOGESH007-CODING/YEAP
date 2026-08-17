@@ -25,6 +25,10 @@ class PrismaUserRepository {
     constructor(db) {
         this.db = db;
     }
+    async findAll() {
+        const users = await this.db.user.findMany({ orderBy: { createdAt: 'asc' } });
+        return users.map(toDto);
+    }
     async findById(id) {
         const user = await this.db.user.findUnique({ where: { id } });
         return user ? toDto(user) : null;

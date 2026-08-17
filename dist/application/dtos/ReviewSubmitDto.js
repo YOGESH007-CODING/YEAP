@@ -8,6 +8,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReviewTrackSchema = exports.ReviewSubmitSchema = void 0;
 const zod_1 = require("zod");
+const MemoryLayerService_1 = require("../use-cases/MemoryLayerService");
 // ─── Request Schema ───────────────────────────────────────────────────────────
 exports.ReviewSubmitSchema = zod_1.z.object({
     problemId: zod_1.z
@@ -20,6 +21,7 @@ exports.ReviewSubmitSchema = zod_1.z.object({
         .min(0, 'qualityScore must be at least 0')
         .max(5, 'qualityScore must be at most 5')
         .describe('SM-2 quality score: 0 (complete blackout) to 5 (perfect recall)'),
+    mistake: zod_1.z.object({ type: zod_1.z.enum(MemoryLayerService_1.MISTAKE_TYPES), description: zod_1.z.string().trim().max(500).optional() }).optional(),
 });
 exports.ReviewTrackSchema = zod_1.z.object({
     problemId: zod_1.z

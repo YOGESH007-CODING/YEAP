@@ -31,6 +31,7 @@ export interface UpdateUserDto {
     telegramChatId?: string;
 }
 export interface IUserRepository {
+    findAll(): Promise<UserDto[]>;
     findById(id: string): Promise<UserDto | null>;
     findByEmail(email: string): Promise<UserDto | null>;
     findByProvider(provider: UserDto['provider'], providerId: string): Promise<UserDto | null>;

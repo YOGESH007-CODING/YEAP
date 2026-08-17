@@ -4,6 +4,16 @@ exports.authRateLimit = void 0;
 const attempts = new Map();
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS = 20;
+// Remove inactive keys even if their IP never sends another request. `unref`
+// keeps this housekeeping timer from preventing a graceful process shutdown.
+const cleanupTimer = setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of attempts) {
+        if (entry.resetAt <= now)
+            attempts.delete(key);
+    }
+}, WINDOW_MS);
+cleanupTimer.unref();
 const authRateLimit = (req, res, next) => {
     const key = req.ip ?? 'unknown';
     const now = Date.now();

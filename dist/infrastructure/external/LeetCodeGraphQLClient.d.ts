@@ -13,7 +13,7 @@ export declare class LeetCodeGraphQLClient implements ILeetCodeClient {
     constructor(endpoint?: string);
     /**
      * Verifies that a user has an accepted submission for a given problem.
-     * Checks up to the 20 most recent accepted submissions.
+     * Checks up to the 100 most recent accepted submissions.
      */
     verifyUserSubmission(leetcodeUsername: string, problemSlug: string): Promise<boolean>;
     /**

@@ -3,7 +3,7 @@
  * src/server.ts
  *
  * Application bootstrapper and HTTP server listener.
- * Loads environment and starts the Express API.
+ * Loads environment and starts Express API (and optional persistent BullMQ worker).
  */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
@@ -16,13 +16,22 @@ dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '.env.loca
 dotenv_1.default.config({ path: path_1.default.resolve(process.cwd(), '.env') });
 const app_1 = require("./app");
 const prismaClient_1 = require("./infrastructure/database/prismaClient");
-// Redis/BullMQ worker support is disabled for the Vercel deployment.
-// import { verifyRedisConnection } from './infrastructure/workers/queueSetup';
+const queueSetup_1 = require("./infrastructure/workers/queueSetup");
+const DailyQueueWorker_1 = require("./infrastructure/workers/DailyQueueWorker");
 const logger_1 = require("./shared/utils/logger");
 const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
+const ENABLE_WORKER = process.env['ENABLE_WORKER'] === 'true';
 const startServer = async () => {
-    // Redis/BullMQ startup verification is disabled. The API does not require Redis.
-    // await verifyRedisConnection();
+    // If persistent worker mode is explicitly enabled (e.g. Railway / Render / Fly.io)
+    if (ENABLE_WORKER) {
+        logger_1.logger.info('[Worker] ENABLE_WORKER=true. Initializing BullMQ Worker & Redis connection...');
+        await (0, queueSetup_1.verifyRedisConnection)();
+        await (0, queueSetup_1.registerDailyJob)();
+        (0, DailyQueueWorker_1.createDailyQueueWorker)();
+    }
+    else {
+        logger_1.logger.info('[Server] ENABLE_WORKER=false (Vercel mode). Worker and Redis scheduler disabled.');
+    }
     const app = (0, app_1.createApp)();
     const server = app.listen(PORT, () => {
         logger_1.logger.info(`🚀 YEAP SRS Server running on http://localhost:${PORT}`);
@@ -33,6 +42,10 @@ const startServer = async () => {
     const shutdown = async (signal) => {
         logger_1.logger.info(`[Server] Received ${signal}. Shutting down gracefully...`);
         server.close(async () => {
+            if (ENABLE_WORKER) {
+                await (0, DailyQueueWorker_1.closeWorker)();
+                await (0, queueSetup_1.closeQueue)();
+            }
             await (0, prismaClient_1.disconnectPrisma)();
             logger_1.logger.info('[Server] Server closed. Goodbye!');
             process.exit(0);

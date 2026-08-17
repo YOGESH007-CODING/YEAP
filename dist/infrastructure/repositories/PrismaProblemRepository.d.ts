@@ -3,7 +3,7 @@
  *
  * Concrete implementation of IProblemRepository using Prisma.
  */
-import type { PrismaClient } from '@prisma/client';
+import { type PrismaClient } from '@prisma/client';
 import type { IProblemRepository, ProblemDto, CreateProblemDto } from '../../domain/interfaces/IProblemRepository';
 export declare class PrismaProblemRepository implements IProblemRepository {
     private readonly db;

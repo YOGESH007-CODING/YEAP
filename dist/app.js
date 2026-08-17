@@ -16,7 +16,12 @@ const logger_1 = require("./shared/utils/logger");
 const reviewRoutes_1 = __importDefault(require("./infrastructure/web/routes/reviewRoutes"));
 const problemRoutes_1 = __importDefault(require("./infrastructure/web/routes/problemRoutes"));
 const authRoutes_1 = __importDefault(require("./infrastructure/web/routes/authRoutes"));
+const trackerRoutes_1 = __importDefault(require("./infrastructure/web/routes/trackerRoutes"));
+const noteRoutes_1 = __importDefault(require("./infrastructure/web/routes/noteRoutes"));
+const streakRoutes_1 = __importDefault(require("./infrastructure/web/routes/streakRoutes"));
+const shareRoutes_1 = __importDefault(require("./infrastructure/web/routes/shareRoutes"));
 const helmet_1 = __importDefault(require("helmet"));
+const requestContext_1 = require("./infrastructure/web/middleware/requestContext");
 // ─── App Factory ──────────────────────────────────────────────────────────────
 const createApp = () => {
     const app = (0, express_1.default)();
@@ -27,6 +32,7 @@ const createApp = () => {
     }));
     app.use(express_1.default.json({ limit: '1mb' }));
     app.use(express_1.default.urlencoded({ extended: true }));
+    app.use(requestContext_1.requestContext);
     // ── Request Logging ───────────────────────────────────────────────────
     app.use((req, _res, next) => {
         logger_1.logger.debug(`→ ${req.method} ${req.path}`);
@@ -57,6 +63,10 @@ const createApp = () => {
     app.use('/api/auth', authRoutes_1.default);
     app.use('/api/review', reviewRoutes_1.default);
     app.use('/api/problems', problemRoutes_1.default);
+    app.use('/api/trackers', trackerRoutes_1.default);
+    app.use('/api/notes', noteRoutes_1.default);
+    app.use('/api/streak', streakRoutes_1.default);
+    app.use('/api/share', shareRoutes_1.default);
     // ── 404 Handler ───────────────────────────────────────────────────────
     app.use((_req, res) => {
         res.status(404).json({

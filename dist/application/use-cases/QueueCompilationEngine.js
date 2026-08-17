@@ -20,8 +20,13 @@ const logger_1 = require("../../shared/utils/logger");
 // ─── Constants ───────────────────────────────────────────────────────────────
 /** Maximum number of items dispatched to any single user per morning run. */
 const BACKLOG_SOFT_CAP = 5;
+/** Each user is automatically seeded until they track this many problems. */
+const MINIMUM_TRACKED_PROBLEMS = 5;
+const FAANG_COMPANIES = ['Amazon', 'Google', 'Meta', 'Microsoft', 'Apple'];
 /** Items with EF below this are considered "critical" and flagged in the bundle. */
 const CRITICAL_EF_THRESHOLD = 1.8;
+/** Maximum number of users processed concurrently by a single daily worker. */
+const USER_PROCESSING_CONCURRENCY = 25;
 // ─── Engine ───────────────────────────────────────────────────────────────────
 class QueueCompilationEngine {
     constructor(deps) {
@@ -29,6 +34,7 @@ class QueueCompilationEngine {
         this.problemRepo = deps.problemRepository;
         this.userRepo = deps.userRepository;
         this.notificationProvider = deps.notificationProvider;
+        this.masteryLookup = deps.masteryLookup;
     }
     /**
      * Execute the morning compilation run.
@@ -41,27 +47,12 @@ class QueueCompilationEngine {
             totalItemsDispatched: 0,
             failures: [],
         };
-        // ── 1. Pull all due items from DB (indexed query on dueDate) ─────────
-        // The repository handles grouping efficiently; we fetch with a generous
-        // per-user limit and apply the final cap here in application logic.
-        const allDueItems = await this.progressRepo.findAllDue(BACKLOG_SOFT_CAP * 2);
-        if (allDueItems.length === 0) {
-            logger_1.logger.info('[QueueCompilationEngine] No due items found. Nothing to dispatch.');
-            return result;
-        }
-        // ── 2. Group by userId ────────────────────────────────────────────────
-        const byUser = this.groupByUser(allDueItems);
-        logger_1.logger.info(`[QueueCompilationEngine] Found due items for ${byUser.size} users.`);
-        // ── 3. Process each user's queue ──────────────────────────────────────
-        for (const [userId, items] of byUser.entries()) {
-            try {
-                await this.processUserQueue(userId, items, result);
-            }
-            catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                logger_1.logger.error(`[QueueCompilationEngine] Failed for user ${userId}: ${message}`);
-                result.failures.push({ userId, error: message });
-            }
+        // Check every user so a new user with no existing progress is seeded too.
+        const users = await this.userRepo.findAll();
+        logger_1.logger.info(`[QueueCompilationEngine] Checking queues for ${users.length} users.`);
+        for (let start = 0; start < users.length; start += USER_PROCESSING_CONCURRENCY) {
+            const batch = users.slice(start, start + USER_PROCESSING_CONCURRENCY);
+            await Promise.all(batch.map((user) => this.processUser(user.id, result)));
         }
         logger_1.logger.info(`[QueueCompilationEngine] Complete. ` +
             `Users: ${result.usersProcessed}, ` +
@@ -70,9 +61,46 @@ class QueueCompilationEngine {
         return result;
     }
     // ─── Private Helpers ───────────────────────────────────────────────────────
+    async processUser(userId, result) {
+        try {
+            await this.seedMinimumQueue(userId);
+            const items = await this.progressRepo.findDueByUser(userId, BACKLOG_SOFT_CAP * 2);
+            if (items.length > 0) {
+                await this.processUserQueue(userId, items, result);
+            }
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger_1.logger.error(`[QueueCompilationEngine] Failed for user ${userId}: ${message}`);
+            result.failures.push({ userId, error: message });
+        }
+    }
+    /**
+     * Adds random unseen FAANG problems only until a user has five tracked
+     * problems. findOrCreate keeps the insert idempotent across retries.
+     */
+    async seedMinimumQueue(userId) {
+        const tracked = await this.progressRepo.findAllByUser(userId);
+        const required = MINIMUM_TRACKED_PROBLEMS - tracked.length;
+        if (required <= 0)
+            return;
+        const unseen = await this.problemRepo.getUnseenProblems(userId, required, FAANG_COMPANIES);
+        for (const problem of unseen) {
+            await this.progressRepo.findOrCreate(userId, problem.id);
+        }
+        logger_1.logger.info(`[QueueCompilationEngine] Added ${unseen.length} unseen FAANG problems ` +
+            `for user ${userId} (${tracked.length + unseen.length}/${MINIMUM_TRACKED_PROBLEMS} tracked).`);
+    }
     async processUserQueue(userId, rawItems, result) {
-        // Sort ascending by easinessFactor — lowest EF = most critical = process first
-        const sorted = [...rawItems].sort((a, b) => a.easinessFactor - b.easinessFactor);
+        const allTopics = [...new Set(rawItems.flatMap((item) => item.problem.topicTags))];
+        const mastery = this.masteryLookup ? await this.masteryLookup(userId, allTopics) : new Map();
+        const priority = (item) => {
+            // EF is bounded by SM-2 at 1.3; 2.5 is its normal starting point.
+            const normalizedEF = Math.max(0, Math.min(1, (item.easinessFactor - 1.3) / 1.2));
+            const weakestMastery = Math.min(...item.problem.topicTags.map((topic) => mastery.get(topic) ?? 50));
+            return (1 - normalizedEF) * 0.6 + (1 - weakestMastery / 100) * 0.4;
+        };
+        const sorted = [...rawItems].sort((a, b) => priority(b) - priority(a));
         // Apply strict backlog soft-cap
         const capped = sorted.slice(0, BACKLOG_SOFT_CAP);
         // Fetch user profile for notification targeting
@@ -99,7 +127,7 @@ class QueueCompilationEngine {
         const bonusItems = [];
         if (reviewItems.length < BACKLOG_SOFT_CAP) {
             const needed = BACKLOG_SOFT_CAP - reviewItems.length;
-            const bonusProblems = await this.problemRepo.getUnseenProblems(userId, needed, ['Amazon', 'Google', 'Meta', 'Microsoft', 'Apple']);
+            const bonusProblems = await this.problemRepo.getUnseenProblems(userId, needed, FAANG_COMPANIES);
             for (const problem of bonusProblems) {
                 bonusItems.push({
                     problemSlug: problem.slug,
@@ -133,15 +161,6 @@ class QueueCompilationEngine {
         else {
             throw new Error(`Notification failed: ${notifResult.error ?? 'Unknown error'}`);
         }
-    }
-    groupByUser(items) {
-        const map = new Map();
-        for (const item of items) {
-            const existing = map.get(item.userId) ?? [];
-            existing.push(item);
-            map.set(item.userId, existing);
-        }
-        return map;
     }
 }
 exports.QueueCompilationEngine = QueueCompilationEngine;

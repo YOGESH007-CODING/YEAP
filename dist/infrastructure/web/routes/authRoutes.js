@@ -4,9 +4,14 @@ const express_1 = require("express");
 const AuthController_1 = require("../controllers/AuthController");
 const authValidation_1 = require("../middleware/authValidation");
 const authRateLimit_1 = require("../middleware/authRateLimit");
+const csrfProtection_1 = require("../middleware/csrfProtection");
+const accountDeletionRateLimit_1 = require("../middleware/accountDeletionRateLimit");
+const emailVerificationRateLimit_1 = require("../middleware/emailVerificationRateLimit");
 const router = (0, express_1.Router)();
 const handle = (fn) => (req, res, next) => { Promise.resolve(fn(req, res)).catch(next); };
 router.post('/register', authRateLimit_1.authRateLimit, handle(AuthController_1.AuthController.register));
+router.post('/verify-email', authRateLimit_1.authRateLimit, emailVerificationRateLimit_1.emailVerificationRateLimit, handle(AuthController_1.AuthController.verifyEmail));
+router.post('/resend-verification', authRateLimit_1.authRateLimit, emailVerificationRateLimit_1.emailVerificationRateLimit, handle(AuthController_1.AuthController.resendVerificationCode));
 router.post('/login', authRateLimit_1.authRateLimit, handle(AuthController_1.AuthController.login));
 router.get('/google', authRateLimit_1.authRateLimit, handle(AuthController_1.AuthController.oauthStart('google')));
 router.get('/google/callback', authRateLimit_1.authRateLimit, handle(AuthController_1.AuthController.oauthCallback('google')));
@@ -15,5 +20,7 @@ router.get('/github/callback', authRateLimit_1.authRateLimit, handle(AuthControl
 router.post('/refresh', authRateLimit_1.authRateLimit, handle(AuthController_1.AuthController.refresh));
 router.post('/logout', handle(AuthController_1.AuthController.logout));
 router.patch('/profile', authValidation_1.authValidation, handle(AuthController_1.AuthController.updateProfile));
+router.post('/delete-account/reauth', authValidation_1.authValidation, csrfProtection_1.csrfProtection, accountDeletionRateLimit_1.accountDeletionRateLimit, handle(AuthController_1.AuthController.beginAccountDeletionReauth));
+router.delete('/delete-account', authValidation_1.authValidation, csrfProtection_1.csrfProtection, accountDeletionRateLimit_1.accountDeletionRateLimit, handle(AuthController_1.AuthController.deleteAccount));
 exports.default = router;
 //# sourceMappingURL=authRoutes.js.map

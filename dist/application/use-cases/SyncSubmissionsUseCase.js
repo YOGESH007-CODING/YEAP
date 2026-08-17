@@ -18,7 +18,7 @@ exports.SyncSubmissionsUseCase = void 0;
 const logger_1 = require("../../shared/utils/logger");
 // ─── Constants ───────────────────────────────────────────────────────────────
 /** Default number of recent AC submissions to fetch from LeetCode. */
-const DEFAULT_FETCH_LIMIT = 50;
+const DEFAULT_FETCH_LIMIT = 100;
 // ─── Use Case ─────────────────────────────────────────────────────────────────
 class SyncSubmissionsUseCase {
     constructor(deps) {

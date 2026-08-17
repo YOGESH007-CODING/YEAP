@@ -47,6 +47,8 @@ export interface QueueCompilationEngineDeps {
   problemRepository: IProblemRepository;
   userRepository: IUserRepository;
   notificationProvider: INotificationProvider;
+  /** Returns topic mastery by topic name; absent data is intentionally neutral (50). */
+  masteryLookup?: (userId: string, topics: string[]) => Promise<Map<string, number>>;
 }
 
 // ─── Result Types ─────────────────────────────────────────────────────────────
@@ -64,12 +66,14 @@ export class QueueCompilationEngine {
   private readonly problemRepo: IProblemRepository;
   private readonly userRepo: IUserRepository;
   private readonly notificationProvider: INotificationProvider;
+  private readonly masteryLookup?: QueueCompilationEngineDeps['masteryLookup'];
 
   constructor(deps: QueueCompilationEngineDeps) {
     this.progressRepo = deps.progressRepository;
     this.problemRepo = deps.problemRepository;
     this.userRepo = deps.userRepository;
     this.notificationProvider = deps.notificationProvider;
+    this.masteryLookup = deps.masteryLookup;
   }
 
   /**
@@ -150,10 +154,15 @@ export class QueueCompilationEngine {
     rawItems: DueProgressWithProblem[],
     result: CompilationResult,
   ): Promise<void> {
-    // Sort ascending by easinessFactor — lowest EF = most critical = process first
-    const sorted = [...rawItems].sort(
-      (a, b) => a.easinessFactor - b.easinessFactor,
-    );
+    const allTopics = [...new Set(rawItems.flatMap((item) => item.problem.topicTags))];
+    const mastery = this.masteryLookup ? await this.masteryLookup(userId, allTopics) : new Map<string, number>();
+    const priority = (item: DueProgressWithProblem): number => {
+      // EF is bounded by SM-2 at 1.3; 2.5 is its normal starting point.
+      const normalizedEF = Math.max(0, Math.min(1, (item.easinessFactor - 1.3) / 1.2));
+      const weakestMastery = Math.min(...item.problem.topicTags.map((topic) => mastery.get(topic) ?? 50));
+      return (1 - normalizedEF) * 0.6 + (1 - weakestMastery / 100) * 0.4;
+    };
+    const sorted = [...rawItems].sort((a, b) => priority(b) - priority(a));
 
     // Apply strict backlog soft-cap
     const capped = sorted.slice(0, BACKLOG_SOFT_CAP);

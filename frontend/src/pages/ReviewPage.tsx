@@ -6,7 +6,8 @@ import { Button } from '../components/ui/Button';
 import { Badge, DifficultyBadge } from '../components/ui/Badge';
 import { QualitySelector } from '../components/ui/QualitySelector';
 
-interface Problem { id: string; slug: string; title: string; difficulty: string; topicTags: string[] }
+interface Note { noteText: string; importantFlag: boolean }
+interface Problem { id: string; slug: string; title: string; difficulty: string; topicTags: string[]; note?: Note | null }
 interface ReportResponse {
   success: boolean; message: string;
   data: { problemId: string; problemSlug: string; problemTitle: string; difficulty: string; newInterval: number; newEasinessFactor: number; nextDueDate: string; repetitions: number; qualityScore: number };
@@ -22,11 +23,16 @@ export function ReviewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ReportResponse['data'] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [mistakeType, setMistakeType] = useState('');
+  const [mistakeDescription, setMistakeDescription] = useState('');
+  const [noteText, setNoteText] = useState('');
+  const [importantFlag, setImportantFlag] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
 
   useEffect(() => {
     if (!slug) return;
     api.get<ProblemResponse>(`/api/problems/${encodeURIComponent(slug)}`)
-      .then(res => setProblem(res.data))
+      .then(res => { setProblem(res.data); setNoteText(res.data.note?.noteText ?? ''); setImportantFlag(res.data.note?.importantFlag ?? false); })
       .catch(() => setError('Failed to load problem'))
       .finally(() => setLoading(false));
   }, [slug]);
@@ -35,10 +41,20 @@ export function ReviewPage() {
     if (qualityScore === null || !slug) return;
     setSubmitting(true); setError(null);
     try {
-      const res = await api.post<ReportResponse>('/api/review/report', { problemSlug: slug, qualityScore });
+      const mistake = qualityScore <= 2 && mistakeType ? { type: mistakeType, description: mistakeDescription || undefined } : undefined;
+      const res = await api.post<ReportResponse>('/api/review/report', { problemSlug: slug, qualityScore, mistake });
+      if (problem && noteText.trim()) await api.patch(`/api/notes/${problem.id}`, { noteText: noteText.trim(), importantFlag });
       setResult(res.data);
     } catch (e) { setError(e instanceof Error ? e.message : 'Submission failed'); }
     finally { setSubmitting(false); }
+  }
+
+  async function saveNote() {
+    if (!problem || !noteText.trim()) return;
+    setSavingNote(true); setError(null);
+    try { await api.patch(`/api/notes/${problem.id}`, { noteText: noteText.trim(), importantFlag }); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Unable to save note'); }
+    finally { setSavingNote(false); }
   }
 
   if (loading) return <div className="mx-auto max-w-screen-xl px-4 py-16 text-center text-sm text-[#8A8F98]">Loading...</div>;
@@ -123,6 +139,10 @@ export function ReviewPage() {
           <h2 className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98] mb-3">How well did you recall this?</h2>
           <QualitySelector value={qualityScore} onChange={setQualityScore} />
         </div>
+
+        {qualityScore !== null && qualityScore <= 2 && <div className="mb-6 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4"><label className="font-mono text-[10px] uppercase tracking-widest text-[#8A8F98]">What went wrong? <span className="normal-case text-white/30">optional</span></label><select value={mistakeType} onChange={(e) => setMistakeType(e.target.value)} className="mt-2 block w-full rounded-lg border border-white/[0.1] bg-[#16171A] p-2 text-sm text-[#EDEDEF]"><option value="">Select a mistake type</option>{['LOGIC_ERROR','EDGE_CASE','WRONG_APPROACH','TIME_COMPLEXITY','MISREAD_PROBLEM','FORGOT_PATTERN','SYNTAX_SLIP'].map((type) => <option key={type} value={type}>{type.replaceAll('_', ' ').toLowerCase()}</option>)}</select><textarea value={mistakeDescription} onChange={(e) => setMistakeDescription(e.target.value)} maxLength={500} placeholder="Optional context for future you" className="mt-2 min-h-20 w-full rounded-lg border border-white/[0.1] bg-[#16171A] p-2 text-sm text-[#EDEDEF]" /></div>}
+
+        <div className="mb-8 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4"><div className="flex items-center justify-between gap-3"><label className="font-mono text-[10px] uppercase tracking-widest text-[#8A8F98]">Personal note</label><label className="flex items-center gap-1.5 text-xs text-[#8A8F98]"><input type="checkbox" checked={importantFlag} onChange={(e) => setImportantFlag(e.target.checked)} /> Key insight</label></div><textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} maxLength={10000} placeholder="Patterns, edge cases, or the insight you want to remember..." className="mt-2 min-h-24 w-full rounded-lg border border-white/[0.1] bg-[#16171A] p-2 text-sm text-[#EDEDEF]" /><button type="button" onClick={saveNote} disabled={!noteText.trim() || savingNote} className="mt-2 text-xs text-[#8B94E5] disabled:text-white/30">{savingNote ? 'Saving...' : 'Save note'}</button></div>
 
         {error && (
           <div className="border border-red-500/30 bg-red-500/10 rounded-lg p-3 mb-4">

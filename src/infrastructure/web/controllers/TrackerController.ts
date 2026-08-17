@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { CreateTrackerDto, UpdateTrackerDto } from '../../../application/dtos/TrackerDto';
 import { prisma } from '../../database/prismaClient';
+import { calculateMasteryScore } from '../../../application/use-cases/MemoryLayerService';
 
 const SUPPORTED_COMPANIES = ['Amazon', 'Apple', 'Google', 'Meta', 'Microsoft', 'Netflix'] as const;
 const startOfDay = (date: Date): Date => new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -70,6 +71,35 @@ const trackerSummary = async (userId: string, tracker: {
 export const TrackerController = {
   async supportedCompanies(_req: Request, res: Response): Promise<void> {
     res.json({ success: true, data: { companies: SUPPORTED_COMPANIES } });
+  },
+
+  async heatmap(req: Request, res: Response): Promise<void> {
+    const topics = (await prisma.userTopicMastery.findMany({ where: { userId: req.userId! } }))
+      .map((topic) => ({ ...topic, masteryScore: calculateMasteryScore(topic.totalAttempts, topic.correctAttempts, topic.mistakeCount, topic.lastPracticedAt) }))
+      .sort((a, b) => a.masteryScore - b.masteryScore);
+    res.json({ success: true, data: { topics } });
+  },
+
+  async readiness(req: Request, res: Response): Promise<void> {
+    const tracker = await prisma.companyTracker.findFirst({ where: { id: req.params['trackerId'], userId: req.userId! } });
+    if (!tracker) { res.status(404).json({ success: false, error: 'Tracker not found.' }); return; }
+    const now = new Date();
+    const problems = await prisma.problem.findMany({ where: { companyTags: { has: tracker.companyName } }, select: { id: true, difficulty: true, topicTags: true, progresses: { where: { userId: req.userId! }, select: { dueDate: true } } } });
+    const solved = problems.filter((p) => p.progresses.length > 0);
+    const coverage = problems.length ? solved.length / problems.length : 0;
+    const topicCounts = new Map<string, number>();
+    problems.forEach((p) => p.topicTags.forEach((t) => topicCounts.set(t, (topicCounts.get(t) ?? 0) + 1)));
+    const masteries = await prisma.userTopicMastery.findMany({ where: { userId: req.userId!, topicName: { in: [...topicCounts.keys()] } } });
+    const masteryMap = new Map(masteries.map((m) => [m.topicName, m.masteryScore]));
+    const totalAttempts = masteries.reduce((sum, m) => sum + m.totalAttempts, 0);
+    const topicStrength = totalAttempts < 10 ? coverage : [...topicCounts.entries()].reduce((sum, [topic, count]) => sum + count * ((masteryMap.get(topic) ?? 50) / 100), 0) / Math.max(1, problems.reduce((sum, p) => sum + p.topicTags.length, 0));
+    const freshnessPenalty = solved.length ? -0.15 * (solved.filter((p) => p.progresses[0].dueDate < now).length / solved.length) : 0;
+    const companyHardRatio = problems.length ? problems.filter((p) => p.difficulty === 'HARD').length / problems.length : 0;
+    const userHardRatio = solved.length ? solved.filter((p) => p.difficulty === 'HARD').length / solved.length : 0;
+    const difficultyAlignment = Math.max(0, 1 - Math.abs(userHardRatio - companyHardRatio));
+    const score = Math.round(Math.max(0, Math.min(100, 100 * (.35 * coverage + .35 * topicStrength + .20 * difficultyAlignment + freshnessPenalty))));
+    const weakestTopics = [...topicCounts.keys()].sort((a, b) => (masteryMap.get(a) ?? 50) - (masteryMap.get(b) ?? 50)).slice(0, 5);
+    res.json({ success: true, data: { score, earlyEstimate: totalAttempts < 10, breakdown: { coverage, topicStrength, freshnessPenalty, difficultyAlignment }, weakestTopics } });
   },
 
   async list(req: Request, res: Response): Promise<void> {

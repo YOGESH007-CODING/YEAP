@@ -25,6 +25,8 @@ const PrismaProblemRepository_1 = require("../../repositories/PrismaProblemRepos
 const PrismaUserRepository_1 = require("../../repositories/PrismaUserRepository");
 const LeetCodeGraphQLClient_1 = require("../../external/LeetCodeGraphQLClient");
 const logger_1 = require("../../../shared/utils/logger");
+const MemoryLayerService_1 = require("../../../application/use-cases/MemoryLayerService");
+const StreakController_1 = require("./StreakController");
 // ─── Dependency Composition ───────────────────────────────────────────────────
 // Assembled once — repositories are stateless adapters, safe to reuse.
 const progressRepository = new PrismaProblemProgressRepository_1.PrismaProblemProgressRepository(prismaClient_1.prisma);
@@ -47,6 +49,7 @@ const reportProcessor = new ReportProblemUseCase_1.ReportProblemUseCase({
     progressRepository,
     problemRepository,
 });
+const memoryLayer = new MemoryLayerService_1.MemoryLayerService(prismaClient_1.prisma);
 // ─── Controller ───────────────────────────────────────────────────────────────
 exports.ReviewController = {
     /**
@@ -78,7 +81,10 @@ exports.ReviewController = {
         // ── 3. Execute use case ──────────────────────────────────────────────
         try {
             const verifyWithLeetCode = req.body.verifyWithLeetCode === true;
+            const existingProgress = await prismaClient_1.prisma.problemProgress.findUnique({ where: { userId_problemId: { userId: req.userId, problemId: parseResult.data.problemId } }, select: { dueDate: true } });
             const result = await reviewProcessor.execute(req.userId, parseResult.data, verifyWithLeetCode);
+            await memoryLayer.recordReview(req.userId, result.data.problemId, parseResult.data.qualityScore, parseResult.data.mistake);
+            await StreakController_1.StreakController.evaluateAfterReview(req.userId, Boolean(existingProgress && existingProgress.dueDate <= new Date()));
             logger_1.logger.info(`[ReviewController] User ${req.userId} reviewed problem ${parseResult.data.problemId} ` +
                 `with quality=${parseResult.data.qualityScore} (verified=${verifyWithLeetCode}). ` +
                 `Next due: ${result.data.nextDueDate}`);
@@ -90,17 +96,17 @@ exports.ReviewController = {
             // LeetCode verification or missing username errors → 400 Bad Request
             if (message.includes('verification failed') ||
                 message.includes('not linked')) {
-                res.status(400).json({ success: false, error: message });
+                res.status(400).json({ success: false, error: 'Submission verification could not be completed.' });
                 return;
             }
             // Domain errors (e.g., "Problem not found") → 404
             if (message.includes('not found')) {
-                res.status(404).json({ success: false, error: message });
+                res.status(404).json({ success: false, error: 'Requested problem was not found.' });
                 return;
             }
             // Range errors (e.g., invalid quality score) → 400
             if (error instanceof RangeError) {
-                res.status(400).json({ success: false, error: message });
+                res.status(400).json({ success: false, error: 'Invalid review data.' });
                 return;
             }
             // Unexpected errors → 500
@@ -120,11 +126,15 @@ exports.ReviewController = {
         try {
             const dueItems = await progressRepository.findDueByUser(req.userId, 20);
             const allTracked = await progressRepository.findAllByUser(req.userId);
+            const bonusQuestions = dueItems.length < 5
+                ? await problemRepository.getUnseenProblems(req.userId, 5 - dueItems.length, ['google', 'amazon', 'apple', 'meta', 'netflix'])
+                : [];
             res.status(200).json({
                 success: true,
                 data: {
                     count: dueItems.length,
                     totalTracked: allTracked.length,
+                    bonusQuestions,
                     items: dueItems.map((item) => ({
                         progressId: item.id,
                         problem: item.problem,
@@ -213,11 +223,11 @@ exports.ReviewController = {
             const message = error instanceof Error ? error.message : 'Internal server error';
             logger_1.logger.error(`[ReviewController] sync error: ${message}`);
             if (message.includes('not linked') || message.includes('not found')) {
-                res.status(400).json({ success: false, error: message });
+                res.status(400).json({ success: false, error: 'LeetCode account setup could not be verified.' });
                 return;
             }
             if (message.includes('LeetCode API')) {
-                res.status(502).json({ success: false, error: message });
+                res.status(502).json({ success: false, error: 'LeetCode is temporarily unavailable. Please try again later.' });
                 return;
             }
             res.status(500).json({ success: false, error: 'Internal server error' });
@@ -250,6 +260,7 @@ exports.ReviewController = {
         }
         try {
             const result = await reportProcessor.execute(req.userId, parseResult.data);
+            await memoryLayer.recordReview(req.userId, result.data.problemId, parseResult.data.qualityScore, parseResult.data.mistake);
             logger_1.logger.info(`[ReviewController] User ${req.userId} reported problem "${parseResult.data.problemSlug}" ` +
                 `with quality=${parseResult.data.qualityScore}. Next due: ${result.data.nextDueDate}`);
             res.status(200).json(result);
@@ -258,11 +269,11 @@ exports.ReviewController = {
             const message = error instanceof Error ? error.message : 'Internal server error';
             logger_1.logger.error(`[ReviewController] report error: ${message}`);
             if (message.includes('not found')) {
-                res.status(404).json({ success: false, error: message });
+                res.status(404).json({ success: false, error: 'Requested problem was not found.' });
                 return;
             }
             if (error instanceof RangeError) {
-                res.status(400).json({ success: false, error: message });
+                res.status(400).json({ success: false, error: 'Invalid report data.' });
                 return;
             }
             res.status(500).json({ success: false, error: 'Internal server error' });
@@ -326,7 +337,8 @@ exports.ReviewController = {
             res.status(404).json({ success: false, error: 'Problem not found' });
             return;
         }
-        res.json({ success: true, data: problem });
+        const note = await prismaClient_1.prisma.userNote.findUnique({ where: { userId_problemId: { userId: req.userId, problemId: problem.id } } });
+        res.json({ success: true, data: { ...problem, note } });
     },
     /**
      * GET /api/review/history

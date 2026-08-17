@@ -27,8 +27,8 @@ exports.TokenService = {
     /**
      * Creates a short-lived JWT access token (15 min).
      */
-    signAccessToken(userId, email) {
-        const payload = { sub: userId, email, type: 'access' };
+    signAccessToken(userId, email, tokenVersion = 0) {
+        const payload = { sub: userId, email, type: 'access', ver: tokenVersion };
         return jsonwebtoken_1.default.sign(payload, accessTokenSecret(), { expiresIn: ACCESS_TOKEN_EXPIRY });
     },
     /**

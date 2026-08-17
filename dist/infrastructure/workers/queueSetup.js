@@ -1,126 +1,124 @@
 "use strict";
+/**
+ * src/infrastructure/workers/queueSetup.ts
+ *
+ * Redis and BullMQ Queue initialization.
+ * Manages the connection to Redis (Upstash / local) and exports the daily review queue.
+ */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createWorker = exports.createQueueEvents = exports.createDailyReviewQueue = exports.verifyRedisConnection = exports.getConnectionOptions = exports.JOB_NAMES = exports.QUEUE_NAMES = void 0;
-/**
- * src/infrastructure/workers/queueSetup.ts
- *
- * BullMQ queue initialization and Redis connection configuration.
- * NOTE: BullMQ bundles its own ioredis — use connection options (host/port/password)
- * directly rather than a standalone ioredis instance to avoid type conflicts.
- */
+exports.closeQueue = exports.registerDailyJob = exports.getDailyReviewQueue = exports.verifyRedisConnection = exports.getRedisConnection = exports.QUEUE_NAME = void 0;
 const bullmq_1 = require("bullmq");
 const ioredis_1 = __importDefault(require("ioredis"));
-const url_1 = require("url");
 const logger_1 = require("../../shared/utils/logger");
-// ─── Queue Names ──────────────────────────────────────────────────────────────
-exports.QUEUE_NAMES = {
-    DAILY_REVIEW: 'daily-review-queue',
-};
-// ─── Job Names ────────────────────────────────────────────────────────────────
-exports.JOB_NAMES = {
-    COMPILE_AND_DISPATCH: 'compile-and-dispatch',
-};
-// ─── Redis Connection Options (no separate ioredis instance) ──────────────────
+exports.QUEUE_NAME = 'daily-review-queue';
+let redisClient = null;
+let dailyReviewQueue = null;
 /**
- * Returns BullMQ-compatible connection options.
- * BullMQ manages its own ioredis connection pool internally.
+ * Creates or returns the singleton ioredis client connection.
  */
-const getConnectionOptions = () => {
-    const redisUrl = process.env['REDIS_URL'];
-    if (redisUrl) {
-        try {
-            const parsed = new url_1.URL(redisUrl);
-            return {
-                host: parsed.hostname,
-                port: parseInt(parsed.port || '6379', 10),
-                password: parsed.password || undefined,
-                maxRetriesPerRequest: null, // Required by BullMQ
-                enableReadyCheck: false, // Required by BullMQ
-            };
-        }
-        catch {
-            logger_1.logger.warn('[Redis] Failed to parse REDIS_URL. Falling back to separate environment variables.');
-        }
+const getRedisConnection = () => {
+    if (redisClient) {
+        return redisClient;
     }
-    return {
-        host: process.env['REDIS_HOST'] ?? 'localhost',
-        port: parseInt(process.env['REDIS_PORT'] ?? '6379', 10),
-        password: process.env['REDIS_PASSWORD'] || undefined,
+    const redisUrl = process.env['REDIS_URL'];
+    if (!redisUrl) {
+        throw new Error('REDIS_URL environment variable is required to connect to Redis.');
+    }
+    logger_1.logger.info('[Redis] Initializing Redis connection...');
+    redisClient = new ioredis_1.default(redisUrl, {
         maxRetriesPerRequest: null, // Required by BullMQ
-        enableReadyCheck: false, // Required by BullMQ
-    };
-};
-exports.getConnectionOptions = getConnectionOptions;
-/**
- * Performs a startup health check on the Redis connection.
- * Throws a clear startup error if the connection fails.
- */
-const verifyRedisConnection = async () => {
-    const redisUrl = process.env['REDIS_URL'];
-    let client;
-    logger_1.logger.info('[Redis] Verifying connection health...');
-    if (redisUrl) {
-        client = new ioredis_1.default(redisUrl, { maxRetriesPerRequest: 1 });
-    }
-    else {
-        const opts = (0, exports.getConnectionOptions)();
-        client = new ioredis_1.default({
-            host: opts.host,
-            port: opts.port,
-            password: opts.password,
-            maxRetriesPerRequest: 1, // Fail fast for the check
+        enableReadyCheck: false,
+        tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+    });
+    if (typeof redisClient.on === 'function') {
+        redisClient.on('connect', () => {
+            logger_1.logger.info('[Redis] Successfully connected to Redis.');
+        });
+        redisClient.on('error', (err) => {
+            logger_1.logger.error(`[Redis] Connection error: ${err.message}`);
         });
     }
+    return redisClient;
+};
+exports.getRedisConnection = getRedisConnection;
+/**
+ * Verifies active connectivity to Redis.
+ */
+const verifyRedisConnection = async () => {
     try {
-        await client.ping();
-        logger_1.logger.info('🔌 Redis connection verified successfully.');
+        const connection = (0, exports.getRedisConnection)();
+        const pingResponse = await connection.ping();
+        logger_1.logger.info(`[Redis] Connectivity test response: ${pingResponse}`);
+        return pingResponse === 'PONG';
     }
     catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        logger_1.logger.error(`❌ Redis connection failed: ${msg}. Please ensure Redis is running.`);
-        throw new Error(`Redis connection check failed: ${msg}`);
-    }
-    finally {
-        await client.quit();
+        logger_1.logger.error(`[Redis] Verification failed: ${msg}`);
+        throw new Error(`Redis verification failed: ${msg}`);
     }
 };
 exports.verifyRedisConnection = verifyRedisConnection;
-// ─── Queue Factory ────────────────────────────────────────────────────────────
-const createDailyReviewQueue = () => {
-    const queue = new bullmq_1.Queue(exports.QUEUE_NAMES.DAILY_REVIEW, {
-        connection: (0, exports.getConnectionOptions)(),
+/**
+ * Gets or initializes the BullMQ queue instance.
+ */
+const getDailyReviewQueue = () => {
+    if (dailyReviewQueue) {
+        return dailyReviewQueue;
+    }
+    const connection = (0, exports.getRedisConnection)();
+    dailyReviewQueue = new bullmq_1.Queue(exports.QUEUE_NAME, {
+        connection,
         defaultJobOptions: {
             attempts: 3,
             backoff: {
                 type: 'exponential',
-                delay: 5000, // 5s, 10s, 20s
+                delay: 30000, // 30s initial backoff delay
             },
-            removeOnComplete: 100, // Keep last 100 completed jobs
-            removeOnFail: 50, // Keep last 50 failed jobs
+            removeOnComplete: { age: 86400 * 7, count: 100 }, // Keep max 100 completed jobs up to 7 days
+            removeOnFail: { age: 86400 * 14, count: 200 },
         },
     });
-    queue.on('error', (error) => {
-        logger_1.logger.error(`[BullMQ Queue] Error: ${error.message}`);
-    });
-    return queue;
+    return dailyReviewQueue;
 };
-exports.createDailyReviewQueue = createDailyReviewQueue;
-// ─── Queue Events (for logging/monitoring) ────────────────────────────────────
-const createQueueEvents = (queueName) => {
-    return new bullmq_1.QueueEvents(queueName, {
-        connection: (0, exports.getConnectionOptions)(),
+exports.getDailyReviewQueue = getDailyReviewQueue;
+/**
+ * Registers the repeatable daily review job.
+ */
+const registerDailyJob = async () => {
+    const queue = (0, exports.getDailyReviewQueue)();
+    const cron = process.env['QUEUE_CRON'] ?? '0 4 * * *';
+    const tz = process.env['QUEUE_TIMEZONE'] ?? 'Asia/Kolkata';
+    logger_1.logger.info(`[BullMQ] Upserting repeatable daily job scheduler: cron="${cron}", tz="${tz}"`);
+    await queue.upsertJobScheduler('daily-morning-review-scheduler', {
+        pattern: cron,
+        tz,
+    }, {
+        name: 'daily-morning-review-job',
+        data: {
+            triggeredAt: new Date().toISOString(),
+            timezone: tz,
+        },
     });
+    logger_1.logger.info('[BullMQ] Daily job scheduler successfully registered.');
 };
-exports.createQueueEvents = createQueueEvents;
-// ─── Worker Factory ───────────────────────────────────────────────────────────
-const createWorker = (queueName, processor) => {
-    return new bullmq_1.Worker(queueName, processor, {
-        connection: (0, exports.getConnectionOptions)(),
-        concurrency: 1, // Serial processing for daily runs
-    });
+exports.registerDailyJob = registerDailyJob;
+/**
+ * Gracefully closes the Redis connection and BullMQ queue.
+ */
+const closeQueue = async () => {
+    if (dailyReviewQueue) {
+        await dailyReviewQueue.close();
+        dailyReviewQueue = null;
+        logger_1.logger.info('[BullMQ] Queue closed.');
+    }
+    if (redisClient) {
+        await redisClient.quit();
+        redisClient = null;
+        logger_1.logger.info('[Redis] Client connection closed.');
+    }
 };
-exports.createWorker = createWorker;
+exports.closeQueue = closeQueue;
 //# sourceMappingURL=queueSetup.js.map

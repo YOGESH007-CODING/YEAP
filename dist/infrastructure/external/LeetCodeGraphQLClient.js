@@ -43,12 +43,12 @@ class LeetCodeGraphQLClient {
     }
     /**
      * Verifies that a user has an accepted submission for a given problem.
-     * Checks up to the 20 most recent accepted submissions.
+     * Checks up to the 100 most recent accepted submissions.
      */
     async verifyUserSubmission(leetcodeUsername, problemSlug) {
         try {
             logger_1.logger.debug(`[LeetCodeClient] Verifying submission for user="${leetcodeUsername}", slug="${problemSlug}"`);
-            const response = await this.executeQuery(RECENT_SUBMISSIONS_QUERY, { username: leetcodeUsername, limit: 20 });
+            const response = await this.executeQuery(RECENT_SUBMISSIONS_QUERY, { username: leetcodeUsername, limit: 100 });
             const submissions = response.data?.recentAcSubmissionList ?? [];
             const found = submissions.some((s) => s.titleSlug === problemSlug &&
                 s.statusDisplay === 'Accepted');

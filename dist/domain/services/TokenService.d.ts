@@ -8,6 +8,7 @@ export interface AccessTokenPayload {
     sub: string;
     email: string;
     type: 'access';
+    ver: number;
 }
 export interface RefreshTokenPayload {
     sub: string;
@@ -18,7 +19,7 @@ export declare const TokenService: {
     /**
      * Creates a short-lived JWT access token (15 min).
      */
-    signAccessToken(userId: string, email: string): string;
+    signAccessToken(userId: string, email: string, tokenVersion?: number): string;
     /**
      * Verifies and decodes an access token. Throws on invalid/expired.
      */

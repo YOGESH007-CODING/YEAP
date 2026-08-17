@@ -6,6 +6,7 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrismaProblemRepository = void 0;
+const client_1 = require("@prisma/client");
 // ─── Mapper ───────────────────────────────────────────────────────────────────
 const toDto = (problem) => ({
     id: problem.id,
@@ -68,19 +69,27 @@ class PrismaProblemRepository {
         return toDto(problem);
     }
     async getUnseenProblems(userId, limit, companyTags, topicTags) {
-        const problems = await this.db.problem.findMany({
-            where: {
-                progresses: {
-                    none: {
-                        userId,
-                    },
-                },
-                ...(companyTags ? { companyTags: { hasSome: companyTags } } : {}),
-                ...(topicTags ? { topicTags: { hasSome: topicTags } } : {}),
-            },
-            take: limit,
-            orderBy: { createdAt: 'desc' },
-        });
+        // PostgreSQL's ORDER BY RANDOM() ensures every eligible unseen problem has
+        // an equal chance of being selected. Prisma does not expose this ordering.
+        const companyFilter = companyTags && companyTags.length > 0
+            ? client_1.Prisma.sql `AND p."companyTags" && ARRAY[${client_1.Prisma.join(companyTags)}]::text[]`
+            : client_1.Prisma.empty;
+        const topicFilter = topicTags && topicTags.length > 0
+            ? client_1.Prisma.sql `AND p."topicTags" && ARRAY[${client_1.Prisma.join(topicTags)}]::text[]`
+            : client_1.Prisma.empty;
+        const problems = await this.db.$queryRaw `
+      SELECT p.*
+      FROM problems p
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM problem_progresses progress
+        WHERE progress."problemId" = p.id AND progress."userId" = ${userId}
+      )
+      ${companyFilter}
+      ${topicFilter}
+      ORDER BY RANDOM()
+      LIMIT ${limit}
+    `;
         return problems.map(toDto);
     }
     async searchByTitle(query, limit) {

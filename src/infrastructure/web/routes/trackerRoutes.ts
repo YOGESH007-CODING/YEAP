@@ -8,7 +8,9 @@ const handle = (fn: (req: import('express').Request, res: import('express').Resp
   (req: import('express').Request, res: import('express').Response, next: import('express').NextFunction) => { void fn(req, res).catch(next); };
 
 router.get('/companies', handle(TrackerController.supportedCompanies));
+router.get('/topics/heatmap', handle(TrackerController.heatmap));
 router.get('/', handle(TrackerController.list));
+router.get('/:trackerId/readiness', handle(TrackerController.readiness));
 router.post('/', handle(TrackerController.create));
 router.patch('/:trackerId', handle(TrackerController.update));
 

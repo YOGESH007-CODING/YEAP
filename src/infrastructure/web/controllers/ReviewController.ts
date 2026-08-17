@@ -25,6 +25,8 @@ import { PrismaProblemRepository } from '../../repositories/PrismaProblemReposit
 import { PrismaUserRepository } from '../../repositories/PrismaUserRepository';
 import { LeetCodeGraphQLClient } from '../../external/LeetCodeGraphQLClient';
 import { logger } from '../../../shared/utils/logger';
+import { MemoryLayerService } from '../../../application/use-cases/MemoryLayerService';
+import { StreakController } from './StreakController';
 
 // ─── Dependency Composition ───────────────────────────────────────────────────
 // Assembled once — repositories are stateless adapters, safe to reuse.
@@ -52,6 +54,7 @@ const reportProcessor = new ReportProblemUseCase({
   progressRepository,
   problemRepository,
 });
+const memoryLayer = new MemoryLayerService(prisma);
 
 // ─── Controller ───────────────────────────────────────────────────────────────
 
@@ -88,7 +91,10 @@ export const ReviewController = {
     // ── 3. Execute use case ──────────────────────────────────────────────
     try {
       const verifyWithLeetCode = req.body.verifyWithLeetCode === true;
+      const existingProgress = await prisma.problemProgress.findUnique({ where: { userId_problemId: { userId: req.userId, problemId: parseResult.data.problemId } }, select: { dueDate: true } });
       const result = await reviewProcessor.execute(req.userId, parseResult.data, verifyWithLeetCode);
+      await memoryLayer.recordReview(req.userId, result.data.problemId, parseResult.data.qualityScore, parseResult.data.mistake);
+      await StreakController.evaluateAfterReview(req.userId, Boolean(existingProgress && existingProgress.dueDate <= new Date()));
 
       logger.info(
         `[ReviewController] User ${req.userId} reviewed problem ${parseResult.data.problemId} ` +
@@ -292,6 +298,7 @@ export const ReviewController = {
 
     try {
       const result = await reportProcessor.execute(req.userId, parseResult.data);
+      await memoryLayer.recordReview(req.userId, result.data.problemId, parseResult.data.qualityScore, parseResult.data.mistake);
 
       logger.info(
         `[ReviewController] User ${req.userId} reported problem "${parseResult.data.problemSlug}" ` +
@@ -372,7 +379,8 @@ export const ReviewController = {
     if (!req.userId) { res.status(401).json({ success: false, error: 'Unauthorized' }); return; }
     const problem = await problemRepository.findBySlug(req.params['slug']);
     if (!problem) { res.status(404).json({ success: false, error: 'Problem not found' }); return; }
-    res.json({ success: true, data: problem });
+    const note = await prisma.userNote.findUnique({ where: { userId_problemId: { userId: req.userId, problemId: problem.id } } });
+    res.json({ success: true, data: { ...problem, note } });
   },
 
   /**

@@ -97,58 +97,52 @@ class PrismaProblemProgressRepository {
     }
     async findAllDue(perUserLimit) {
         const now = new Date();
-        // Fetch all overdue records — grouped in-memory after DB fetch
-        // The dueDate index makes this query efficient at scale
-        const records = await this.db.problemProgress.findMany({
-            where: {
-                dueDate: { lte: now },
-            },
-            include: {
-                problem: {
-                    select: {
-                        id: true,
-                        slug: true,
-                        title: true,
-                        difficulty: true,
-                        topicTags: true,
-                        companyTags: true,
-                    },
-                },
-            },
-            orderBy: [
-                { userId: 'asc' },
-                { easinessFactor: 'asc' }, // Within each user: lowest EF first
-            ],
-        });
-        // Apply per-user cap at the application layer
-        const userCounts = new Map();
-        const capped = [];
-        for (const r of records) {
-            const count = userCounts.get(r.userId) ?? 0;
-            if (count >= perUserLimit)
-                continue;
-            userCounts.set(r.userId, count + 1);
-            capped.push({
-                ...toDto(r),
-                problem: {
-                    id: r.problem.id,
-                    slug: r.problem.slug,
-                    title: r.problem.title,
-                    difficulty: r.problem.difficulty,
-                    topicTags: r.problem.topicTags,
-                    companyTags: r.problem.companyTags,
-                },
-            });
-        }
-        return capped;
+        // Apply the per-user cap in PostgreSQL. Fetching every overdue row and
+        // trimming in Node allows a large shared backlog to exhaust worker memory.
+        const records = await this.db.$queryRaw `
+      SELECT
+        ranked.id,
+        ranked."userId",
+        ranked."problemId",
+        ranked.repetitions,
+        ranked."easinessFactor",
+        ranked."intervalDays",
+        ranked."dueDate",
+        ranked."lastReviewedAt",
+        ranked."createdAt",
+        ranked."updatedAt",
+        json_build_object(
+          'id', p.id,
+          'slug', p.slug,
+          'title', p.title,
+          'difficulty', p.difficulty,
+          'topicTags', p."topicTags",
+          'companyTags', p."companyTags"
+        ) AS problem
+      FROM (
+        SELECT pp.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY pp."userId"
+            ORDER BY pp."easinessFactor" ASC, pp."dueDate" ASC
+          ) AS row_number
+        FROM problem_progresses pp
+        WHERE pp."dueDate" <= ${now}
+      ) ranked
+      INNER JOIN problems p ON p.id = ranked."problemId"
+      WHERE ranked.row_number <= ${perUserLimit}
+      ORDER BY ranked."userId" ASC, ranked."easinessFactor" ASC, ranked."dueDate" ASC
+    `;
+        return records;
     }
     async atomicFindAndUpdate(userId, problemId, updater) {
-        await this.db.problemProgress.upsert({
-            where: { userId_problemId: { userId, problemId } },
-            update: {},
-            create: { userId, problemId, repetitions: 0, easinessFactor: SrsEngine_1.EF_DEFAULT, intervalDays: 1, dueDate: new Date() },
-        });
         return this.db.$transaction(async (tx) => {
+            // The upsert and row lock must share one transaction. Otherwise another
+            // request can update the newly created row before this transaction locks it.
+            await tx.problemProgress.upsert({
+                where: { userId_problemId: { userId, problemId } },
+                update: {},
+                create: { userId, problemId, repetitions: 0, easinessFactor: SrsEngine_1.EF_DEFAULT, intervalDays: 1, dueDate: new Date() },
+            });
             // Lock the row to prevent concurrent submits from computing on stale state
             const rows = await tx.$queryRaw `
         SELECT * FROM problem_progresses

@@ -12,6 +12,9 @@ import reviewRoutes from './infrastructure/web/routes/reviewRoutes';
 import problemRoutes from './infrastructure/web/routes/problemRoutes';
 import authRoutes from './infrastructure/web/routes/authRoutes';
 import trackerRoutes from './infrastructure/web/routes/trackerRoutes';
+import noteRoutes from './infrastructure/web/routes/noteRoutes';
+import streakRoutes from './infrastructure/web/routes/streakRoutes';
+import shareRoutes from './infrastructure/web/routes/shareRoutes';
 import helmet from 'helmet';
 import { requestContext } from './infrastructure/web/middleware/requestContext';
 
@@ -65,6 +68,9 @@ app.use(helmet({
   app.use('/api/review', reviewRoutes);
   app.use('/api/problems', problemRoutes);
   app.use('/api/trackers', trackerRoutes);
+  app.use('/api/notes', noteRoutes);
+  app.use('/api/streak', streakRoutes);
+  app.use('/api/share', shareRoutes);
 
   // ── 404 Handler ───────────────────────────────────────────────────────
   app.use((_req: Request, res: Response) => {

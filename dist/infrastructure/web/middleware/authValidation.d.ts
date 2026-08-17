@@ -15,5 +15,5 @@ declare global {
         }
     }
 }
-export declare const authValidation: (req: Request, res: Response, next: NextFunction) => void;
+export declare const authValidation: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 //# sourceMappingURL=authValidation.d.ts.map

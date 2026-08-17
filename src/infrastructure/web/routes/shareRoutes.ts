@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { authValidation } from '../middleware/authValidation';
+import { ShareController } from '../controllers/ShareController';
+const router = Router();
+router.get('/settings', authValidation, (req, res) => { void ShareController.getSettings(req, res); });
+router.patch('/settings', authValidation, (req, res) => { void ShareController.settings(req, res); });
+router.get('/:shareToken/image.png', (req, res) => { void ShareController.image(req, res); });
+router.get('/:shareToken/page', (req, res) => { void ShareController.page(req, res); });
+router.get('/:shareToken', (req, res) => { void ShareController.data(req, res); });
+export default router;

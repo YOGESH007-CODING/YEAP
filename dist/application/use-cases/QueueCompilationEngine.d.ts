@@ -22,6 +22,8 @@ export interface QueueCompilationEngineDeps {
     problemRepository: IProblemRepository;
     userRepository: IUserRepository;
     notificationProvider: INotificationProvider;
+    /** Returns topic mastery by topic name; absent data is intentionally neutral (50). */
+    masteryLookup?: (userId: string, topics: string[]) => Promise<Map<string, number>>;
 }
 export interface CompilationResult {
     usersProcessed: number;
@@ -36,13 +38,19 @@ export declare class QueueCompilationEngine {
     private readonly problemRepo;
     private readonly userRepo;
     private readonly notificationProvider;
+    private readonly masteryLookup?;
     constructor(deps: QueueCompilationEngineDeps);
     /**
      * Execute the morning compilation run.
      * Pulls all overdue items across all users, caps per user, dispatches bundles.
      */
     execute(): Promise<CompilationResult>;
+    private processUser;
+    /**
+     * Adds random unseen FAANG problems only until a user has five tracked
+     * problems. findOrCreate keeps the insert idempotent across retries.
+     */
+    private seedMinimumQueue;
     private processUserQueue;
-    private groupByUser;
 }
 //# sourceMappingURL=QueueCompilationEngine.d.ts.map

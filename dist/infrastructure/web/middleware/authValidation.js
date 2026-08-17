@@ -10,8 +10,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authValidation = void 0;
 const TokenService_1 = require("../../../domain/services/TokenService");
+const prismaClient_1 = require("../../database/prismaClient");
 // ─── JWT Payload Shape ────────────────────────────────────────────────────────
-const authValidation = (req, res, next) => {
+const authValidation = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
         res.status(401).json({
@@ -23,6 +24,9 @@ const authValidation = (req, res, next) => {
     const token = authHeader.slice(7); // Remove "Bearer " prefix
     try {
         const payload = TokenService_1.TokenService.verifyAccessToken(token);
+        const user = await prismaClient_1.prisma.user.findFirst({ where: { id: payload.sub, deletedAt: null, tokenVersion: payload.ver } });
+        if (!user)
+            throw new Error('Session revoked');
         req.userId = payload.sub;
         req.userEmail = payload.email;
         next();

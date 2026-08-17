@@ -14,6 +14,7 @@ import { PrismaUserRepository } from '../repositories/PrismaUserRepository';
 import { ResendNotificationProvider } from '../external/ResendNotificationProvider';
 import { QueueCompilationEngine, CompilationResult } from '../../application/use-cases/QueueCompilationEngine';
 import { logger } from '../../shared/utils/logger';
+import { calculateMasteryScore } from '../../application/use-cases/MemoryLayerService';
 
 let workerInstance: Worker<DailyReviewJobData, CompilationResult> | null = null;
 
@@ -46,6 +47,10 @@ export const createDailyQueueWorker = (): Worker<DailyReviewJobData, Compilation
         problemRepository: problemRepo,
         userRepository: userRepo,
         notificationProvider,
+        masteryLookup: async (userId, topics) => {
+          const records = await prisma.userTopicMastery.findMany({ where: { userId, topicName: { in: topics } }, select: { topicName: true, totalAttempts: true, correctAttempts: true, mistakeCount: true, lastPracticedAt: true } });
+          return new Map(records.map((record) => [record.topicName, calculateMasteryScore(record.totalAttempts, record.correctAttempts, record.mistakeCount, record.lastPracticedAt)]));
+        },
       });
 
       // 3. Execute daily queue compilation

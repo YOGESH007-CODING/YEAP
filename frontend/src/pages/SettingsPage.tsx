@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Code, AlertTriangle } from 'lucide-react';
+import { User, Code, AlertTriangle, Share2, Copy } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
@@ -21,6 +21,20 @@ export function SettingsPage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [shareEnabled, setShareEnabled] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [shareTrackerId, setShareTrackerId] = useState<string | null>(null);
+  const [trackers, setTrackers] = useState<{ id: string; companyName: string }[]>([]);
+
+  useEffect(() => { void Promise.all([api.get<{ success: boolean; data: { enabled: boolean; shareUrl: string | null; trackerId: string | null } }>('/api/share/settings'), api.get<{ success: boolean; data: { trackers: { id: string; companyName: string }[] } }>('/api/trackers')]).then(([share, trackerResult]) => { setShareEnabled(share.data.enabled); setShareUrl(share.data.shareUrl); setShareTrackerId(share.data.trackerId); setTrackers(trackerResult.data.trackers); }).catch(() => {}); }, []);
+
+  const updateSharing = async (enabled: boolean) => {
+    setSharing(true);
+    try { const res = await api.patch<{ success: boolean; data: { enabled: boolean; shareUrl: string | null } }>('/api/share/settings', { enabled, trackerId: shareTrackerId }); setShareEnabled(res.data.enabled); setShareUrl(res.data.shareUrl); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Unable to update sharing settings.'); }
+    finally { setSharing(false); }
+  };
 
   useEffect(() => {
     if (user?.leetcodeUsername) {
@@ -170,6 +184,14 @@ export function SettingsPage() {
               </div>
             </form>
           )}
+        </Card>
+
+        <Card className="p-6">
+          <div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-xl bg-[#5E6AD2]/10 border border-[#5E6AD2]/20 flex items-center justify-center"><Share2 size={18} className="text-[#8B94E5]" /></div><div><h2 className="text-base font-semibold text-[#EDEDEF]">Share progress</h2><p className="font-mono text-[10px] uppercase tracking-widest text-white/30">Opt-in public card</p></div></div>
+          <p className="text-sm text-[#8A8F98] mb-4">Create a public card with your solved count and longest streak. You can turn this off at any time.</p>
+          <label className="flex items-center gap-2 text-sm text-[#EDEDEF]"><input type="checkbox" checked={shareEnabled} disabled={sharing} onChange={(event) => void updateSharing(event.target.checked)} /> Enable public sharing</label>
+          {shareEnabled && trackers.length > 0 && <label className="mt-4 block text-xs text-[#8A8F98]">Highlight company readiness<select value={shareTrackerId ?? ''} onChange={(event) => { setShareTrackerId(event.target.value || null); void api.patch('/api/share/settings', { enabled: true, trackerId: event.target.value || null }); }} className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-[#16171A] p-2 text-sm text-[#EDEDEF]"><option value="">No company highlight</option>{trackers.map((tracker) => <option key={tracker.id} value={tracker.id}>{tracker.companyName}</option>)}</select></label>}
+          {shareUrl && <div className="mt-4 flex gap-2"><Input value={shareUrl} readOnly aria-label="Public share link" /><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(shareUrl)}><Copy size={14} /> Copy</Button></div>}
         </Card>
 
         {/* Danger Zone */}
