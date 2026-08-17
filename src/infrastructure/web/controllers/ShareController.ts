@@ -1,6 +1,5 @@
 import { randomBytes } from 'crypto';
 import { createElement } from 'react';
-import { ImageResponse } from '@vercel/og';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../../database/prismaClient';
@@ -9,6 +8,14 @@ const ShareSettings = z.object({ enabled: z.boolean(), trackerId: z.string().min
 const shareUrl = (token: string): string => `${(process.env['BACKEND_URL'] ?? 'https://yeap.app').replace(/\/$/, '')}/api/share/${token}/page`;
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] ?? character));
 type PublicCard = { username: string; totalSolved: number; streak: number; readinessLabel: string | null; readinessScore: number | null };
+type OgImageResponse = new (element: ReturnType<typeof createElement>, options: { width: number; height: number }) => { arrayBuffer(): Promise<ArrayBuffer> };
+
+// Keep this native dynamic import: TypeScript's CommonJS transform rewrites a
+// normal import into require(), while @vercel/og is ESM-only in Vercel's Node runtime.
+const loadImageResponse = async (): Promise<OgImageResponse> => {
+  const dynamicImport = Function('modulePath', 'return import(modulePath)') as (modulePath: string) => Promise<{ ImageResponse: OgImageResponse }>;
+  return (await dynamicImport('@vercel/og')).ImageResponse;
+};
 
 const publicCard = async (token: string): Promise<PublicCard | null> => {
   const user = await prisma.user.findFirst({ where: { shareToken: token, shareEnabled: true, deletedAt: null }, include: { streak: true } });
@@ -47,6 +54,7 @@ export const ShareController = {
     if (!data) { res.status(404).end(); return; }
     const stat = (label: string, value: string) => createElement('div', { style: { display: 'flex', flexDirection: 'column', marginRight: 48 } }, createElement('span', { style: { fontSize: 22, color: '#9ca3af' } }, label), createElement('span', { style: { fontSize: 48, fontWeight: 700 } }, value));
     const element = createElement('div', { style: { height: '100%', width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 64, color: 'white', background: 'linear-gradient(135deg, #111827, #312e81)' } }, createElement('div', { style: { display: 'flex', fontSize: 28, color: '#a5b4fc', letterSpacing: 5 } }, 'YEAP'), createElement('div', { style: { display: 'flex', flexDirection: 'column' } }, createElement('div', { style: { fontSize: 48, fontWeight: 700, marginBottom: 28 } }, `${data.username}'s prep progress`), createElement('div', { style: { display: 'flex' } }, stat('PROBLEMS SOLVED', String(data.totalSolved)), stat('LONGEST STREAK', `🔥 ${data.streak} days`), ...(data.readinessScore === null ? [] : [stat((data.readinessLabel ?? '').toUpperCase(), `${data.readinessScore}%`)]))), createElement('div', { style: { display: 'flex', fontSize: 20, color: '#c7d2fe' } }, 'Track your own interview prep · yeap.app'));
+    const ImageResponse = await loadImageResponse();
     const image = new ImageResponse(element, { width: 1200, height: 630 });
     res.set('Cache-Control', 'public, max-age=3600, s-maxage=3600').set('Content-Type', 'image/png').send(Buffer.from(await image.arrayBuffer()));
   },
