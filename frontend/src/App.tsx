@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthContext } from './lib/auth';
 import type { AuthUser } from './lib/auth';
 import { api } from './lib/api';
@@ -55,6 +56,7 @@ function App() {
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
+        <Analytics />
       </BrowserRouter>
     </AuthContext.Provider>
   );
