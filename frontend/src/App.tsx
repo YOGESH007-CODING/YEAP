@@ -10,6 +10,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
 
 function App() {
   const [token, setToken] = useState<string | null>(null);
@@ -47,6 +48,7 @@ function App() {
     <AuthContext.Provider value={authValue}>
       <BrowserRouter>
         <Routes>
+          <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
