@@ -14,7 +14,7 @@ export function Input({ label, className = '', id, type, ...props }: InputProps)
   return (
     <div className="flex flex-col gap-1.5 w-full">
       {label && (
-        <label htmlFor={inputId} className="font-mono text-[10px] font-medium uppercase tracking-widest text-[#8A8F98]">
+        <label htmlFor={inputId} className="font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-[#8A8F98]">
           {label}
         </label>
       )}
@@ -23,10 +23,10 @@ export function Input({ label, className = '', id, type, ...props }: InputProps)
           id={inputId}
           type={inputType}
           className={`
-            bg-[#0F0F12] border border-white/10 rounded-lg
-            px-3 py-2.5 text-sm text-[#EDEDEF] w-full
-            placeholder:text-gray-500
-            focus:border-[#5E6AD2] focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)] focus:outline-none
+            w-full bg-[#0A0A0C] border border-white/[0.08] rounded
+            px-3 py-2.5 font-mono text-sm text-[#F3F4F6]
+            placeholder:text-[#525866]
+            focus:border-[rgba(94,106,210,0.5)] focus:shadow-[0_0_0_1px_rgba(94,106,210,0.35)] focus:outline-none
             transition-all duration-200
             ${isPassword ? 'pr-10' : ''}
             ${className}
@@ -37,8 +37,9 @@ export function Input({ label, className = '', id, type, ...props }: InputProps)
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 text-[#8A8F98] hover:text-[#EDEDEF] transition-colors focus:outline-none"
+            className="absolute right-3 text-[#8A8F98] hover:text-[#F3F4F6] transition-colors focus:outline-none cursor-pointer"
             tabIndex={-1}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>

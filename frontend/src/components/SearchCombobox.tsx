@@ -79,28 +79,27 @@ export function SearchCombobox() {
   };
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} className="relative w-full">
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8F98]" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#525866]" />
         <input
           type="text"
           value={query}
           onChange={(e) => { setQuery(e.target.value); setActiveIndex(-1); }}
           onKeyDown={handleKeyDown}
-          placeholder="Search problems..."
+          placeholder="Report a problem (e.g. 146 or LRU)"
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={isOpen}
           aria-controls={isOpen ? listboxId : undefined}
           aria-activedescendant={activeIndex >= 0 ? `${listboxId}-${results[activeIndex]?.id}` : undefined}
-          className="font-mono w-full bg-[#0F0F12] border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-sm text-[#EDEDEF]
-                     placeholder:text-gray-500 focus:border-[#5E6AD2] focus:shadow-[0_0_0_3px_rgba(94,106,210,0.15)] focus:outline-none transition-all duration-200"
+          className="w-full bg-[#201f22] border border-white/[0.08] rounded py-2 pl-9 pr-4 font-mono text-[12px] text-[#F3F4F6] placeholder:text-[#525866] focus:border-[#bdc2ff] focus:ring-1 focus:ring-[#5e6ad2] transition-all outline-none"
         />
-        {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[#8A8F98]">...</span>}
+        {loading && <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[10px] text-[#8A8F98]">...</span>}
       </div>
 
       {isOpen && results.length > 0 && (
-        <div id={listboxId} role="listbox" className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#0a0a0c] border border-white/[0.08] rounded-xl overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.5)]">
+        <div id={listboxId} role="listbox" className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#0A0A0C] border border-white/[0.08] rounded overflow-hidden shadow-[0_16px_48px_rgba(0,0,0,0.6)]">
           {results.map((p, index) => (
             <button
               key={p.id}
@@ -109,12 +108,12 @@ export function SearchCombobox() {
               aria-selected={index === activeIndex}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => selectProblem(p)}
-              className={`w-full text-left px-4 py-3 border-b border-white/[0.04] last:border-b-0
-                         hover:bg-white/[0.05] transition-colors cursor-pointer flex items-center justify-between gap-3
-                         ${index === activeIndex ? 'bg-white/[0.05]' : ''}`}
+              className={`w-full text-left px-3.5 py-2.5 border-b border-white/[0.04] last:border-b-0
+                         hover:bg-[#121217] transition-colors cursor-pointer flex items-center justify-between gap-3
+                         ${index === activeIndex ? 'bg-[#121217]' : ''}`}
             >
               <div className="min-w-0">
-                <div className="text-sm font-medium text-[#EDEDEF] truncate">{p.title}</div>
+                <div className="text-xs font-medium text-[#F3F4F6] truncate">{p.title}</div>
                 <div className="font-mono text-[10px] text-[#8A8F98] tracking-wider mt-0.5">
                   {p.topicTags.slice(0, 3).join(' · ')}
                 </div>
@@ -126,8 +125,8 @@ export function SearchCombobox() {
       )}
 
       {isOpen && results.length === 0 && query.length >= 2 && !loading && (
-        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#0a0a0c] border border-white/[0.08] rounded-xl px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.5)]">
-          <p className="text-sm text-[#8A8F98]">No problems found for "{query}"</p>
+        <div className="absolute z-50 top-full mt-1 left-0 right-0 bg-[#0A0A0C] border border-white/[0.08] rounded px-4 py-3 shadow-[0_16px_48px_rgba(0,0,0,0.6)]">
+          <p className="font-mono text-xs text-[#8A8F98]">No problems found for "{query}"</p>
         </div>
       )}
     </div>

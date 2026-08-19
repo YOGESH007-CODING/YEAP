@@ -1,4 +1,4 @@
-import { Flame, ShieldCheck, Snowflake, Trophy } from 'lucide-react';
+import { Flame, Trophy, Snowflake } from 'lucide-react';
 import { Card } from '../ui/Card';
 
 export interface StreakData {
@@ -8,40 +8,55 @@ export interface StreakData {
   freezesAvailable: number;
 }
 
-const nextMilestone = (streak: number) => [7, 14, 30, 60, 100, 180, 365].find((milestone) => milestone > streak) ?? Math.ceil((streak + 1) / 100) * 100;
+const nextMilestone = (streak: number) => [7, 14, 21, 30, 60, 100, 180, 365].find((milestone) => milestone > streak) ?? Math.ceil((streak + 1) / 100) * 100;
 
 export function StreakCard({ streak }: { streak: StreakData }) {
   const milestone = nextMilestone(streak.currentStreak);
-  const progress = Math.min(100, Math.round((streak.currentStreak / milestone) * 100));
+  const progress = Math.min(100, Math.max(5, Math.round((streak.currentStreak / milestone) * 100)));
   const isPersonalBest = streak.currentStreak > 0 && streak.currentStreak >= streak.longestStreak;
 
   return (
-    <Card accent className="p-4">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#5E6AD2]/30 bg-[#5E6AD2]/15 ${streak.currentStreak > 0 ? 'streak-flame' : ''}`}>
-            <Flame size={17} className="text-[#A5B4FC]" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-[#EDEDEF]">{streak.currentStreak} day streak</h2>
-            <p className="mt-0.5 text-xs text-[#8A8F98]">{streak.streakSafeToday ? 'Today is protected.' : 'Complete today’s queue to protect it.'}</p>
-          </div>
+    <Card className="p-4 sm:p-5">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="w-8 h-8 rounded bg-[#ffb867]/10 flex items-center justify-center text-[#ffb867]">
+          <Flame size={18} className={streak.currentStreak > 0 ? 'animate-pulse' : ''} />
         </div>
-        <div className="order-3 basis-full sm:order-none sm:basis-40">
-          <div className="mb-1.5 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-white/35">
-            <span>Next</span>
-            <span>{streak.currentStreak}/{milestone}</span>
+        <div>
+          <div className="font-headline text-base font-semibold text-[#F3F4F6]">
+            {streak.currentStreak} Day Streak
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
-            <div className="h-full rounded-full bg-[#5E6AD2] streak-progress" style={{ width: `${progress}%` }} />
+          <div className="font-mono text-[11px] text-[#8A8F98]">
+            {streak.streakSafeToday ? 'Protected today' : 'Keep it up!'}
           </div>
-        </div>
-        <div className="flex items-center gap-4 border-l border-white/[0.08] pl-4 text-xs text-[#8A8F98]">
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Trophy size={13} className="text-white/35" /> <b className="font-medium text-[#EDEDEF]">{streak.longestStreak}</b> longest</span>
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><Snowflake size={13} className="text-white/35" /> <b className="font-medium text-[#EDEDEF]">{streak.freezesAvailable}</b> freezes</span>
         </div>
       </div>
-      {isPersonalBest && <div className="mt-3 flex items-center gap-1.5 border-t border-white/[0.06] pt-3 text-[11px] text-[#8A8F98]"><ShieldCheck size={13} className="text-[#8B94E5]" /> You’re matching your personal best.</div>}
+
+      <div className="w-full h-1.5 bg-[#201f22] rounded-full overflow-hidden mb-2">
+        <div
+          className="h-full bg-[#ffb867] rounded-full transition-all duration-500"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+
+      <div className="flex justify-between font-mono text-[10px] text-[#525866]">
+        <span>Current: {streak.currentStreak}d</span>
+        <span>Goal: {milestone}d</span>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between font-mono text-[10px] text-[#8A8F98]">
+        <span className="flex items-center gap-1">
+          <Trophy size={11} className="text-[#525866]" /> Longest: <b className="text-[#F3F4F6] font-medium">{streak.longestStreak}d</b>
+        </span>
+        <span className="flex items-center gap-1">
+          <Snowflake size={11} className="text-[#525866]" /> Freezes: <b className="text-[#F3F4F6] font-medium">{streak.freezesAvailable}</b>
+        </span>
+      </div>
+
+      {isPersonalBest && (
+        <div className="mt-2 text-[10px] font-mono text-[#bdc2ff] text-center">
+          ★ New Personal Record!
+        </div>
+      )}
     </Card>
   );
 }

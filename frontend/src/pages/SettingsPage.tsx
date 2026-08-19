@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { User, Code, AlertTriangle, Share2, Copy } from 'lucide-react';
+import {
+  Code,
+  Share2,
+  Copy,
+  AlertTriangle,
+  KeyRound,
+  CheckCircle2,
+} from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/Button';
@@ -26,14 +33,38 @@ export function SettingsPage() {
   const [sharing, setSharing] = useState(false);
   const [shareTrackerId, setShareTrackerId] = useState<string | null>(null);
   const [trackers, setTrackers] = useState<{ id: string; companyName: string }[]>([]);
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => { void Promise.all([api.get<{ success: boolean; data: { enabled: boolean; shareUrl: string | null; trackerId: string | null } }>('/api/share/settings'), api.get<{ success: boolean; data: { trackers: { id: string; companyName: string }[] } }>('/api/trackers')]).then(([share, trackerResult]) => { setShareEnabled(share.data.enabled); setShareUrl(share.data.shareUrl); setShareTrackerId(share.data.trackerId); setTrackers(trackerResult.data.trackers); }).catch(() => {}); }, []);
+  useEffect(() => {
+    void Promise.all([
+      api.get<{ success: boolean; data: { enabled: boolean; shareUrl: string | null; trackerId: string | null } }>(
+        '/api/share/settings'
+      ),
+      api.get<{ success: boolean; data: { trackers: { id: string; companyName: string }[] } }>('/api/trackers'),
+    ])
+      .then(([share, trackerResult]) => {
+        setShareEnabled(share.data.enabled);
+        setShareUrl(share.data.shareUrl);
+        setShareTrackerId(share.data.trackerId);
+        setTrackers(trackerResult.data.trackers);
+      })
+      .catch(() => {});
+  }, []);
 
   const updateSharing = async (enabled: boolean) => {
     setSharing(true);
-    try { const res = await api.patch<{ success: boolean; data: { enabled: boolean; shareUrl: string | null } }>('/api/share/settings', { enabled, trackerId: shareTrackerId }); setShareEnabled(res.data.enabled); setShareUrl(res.data.shareUrl); }
-    catch (err) { setError(err instanceof Error ? err.message : 'Unable to update sharing settings.'); }
-    finally { setSharing(false); }
+    try {
+      const res = await api.patch<{ success: boolean; data: { enabled: boolean; shareUrl: string | null } }>(
+        '/api/share/settings',
+        { enabled, trackerId: shareTrackerId }
+      );
+      setShareEnabled(res.data.enabled);
+      setShareUrl(res.data.shareUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to update sharing settings.');
+    } finally {
+      setSharing(false);
+    }
   };
 
   useEffect(() => {
@@ -76,22 +107,38 @@ export function SettingsPage() {
   };
 
   const deleteAccount = async () => {
-    if (deleteConfirmation !== 'DELETE') { setDeleteError('Type DELETE to confirm.'); return; }
-    if (user?.provider === 'LOCAL' && !deletePassword) { setDeleteError('Enter your password to continue.'); return; }
-    setDeleting(true); setDeleteError(null);
+    if (deleteConfirmation !== 'DELETE') {
+      setDeleteError('Type DELETE to confirm.');
+      return;
+    }
+    if (user?.provider === 'LOCAL' && !deletePassword) {
+      setDeleteError('Enter your password to continue.');
+      return;
+    }
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      await api.delete<void>('/api/auth/delete-account', user?.provider === 'LOCAL' ? { password: deletePassword } : undefined);
+      await api.delete<void>(
+        '/api/auth/delete-account',
+        user?.provider === 'LOCAL' ? { password: deletePassword } : undefined
+      );
       await signOut();
       navigate('/login', { replace: true });
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Unable to delete account.');
-    } finally { setDeleting(false); }
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const beginOAuthDeletionReauth = async () => {
-    setDeleting(true); setDeleteError(null);
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      const response = await api.post<{ success: boolean; data: { authorizationUrl: string } }>('/api/auth/delete-account/reauth', {});
+      const response = await api.post<{ success: boolean; data: { authorizationUrl: string } }>(
+        '/api/auth/delete-account/reauth',
+        {}
+      );
       window.location.assign(response.data.authorizationUrl);
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'Unable to start reauthentication.');
@@ -99,62 +146,111 @@ export function SettingsPage() {
     }
   };
 
-  return (
-    <div className="mx-auto max-w-screen-xl px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight bg-gradient-to-b from-white via-white/95 to-white/70 bg-clip-text text-transparent">Settings</h1>
-        <p className="text-sm text-[#8A8F98] mt-0.5">Profile and preferences</p>
-      </div>
+  const handleCopyShare = async () => {
+    if (!shareUrl) return;
+    await navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
 
-      <div className="max-w-2xl space-y-4">
-        {/* Profile */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center">
-              <User size={18} className="text-[#8A8F98]" />
+  return (
+    <div className="max-w-[760px] mx-auto px-4 py-8 sm:px-6 lg:py-10">
+      {/* Page Header */}
+      <header className="mb-6 border-b border-white/[0.08] pb-4">
+        <h1 className="font-headline text-2xl sm:text-3xl font-bold text-[#F3F4F6] tracking-tight">
+          System Configuration
+        </h1>
+        <p className="font-mono text-xs text-[#8A8F98] mt-1">
+          Manage integration telemetry, public visibility, and core account parameters.
+        </p>
+      </header>
+
+      <div className="space-y-5">
+        {/* Section 1: Identity Payload */}
+        <Card className="p-5 sm:p-6 noise-bg">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-mono text-[11px] font-medium text-[#8A8F98] uppercase tracking-wider">
+              Identity Payload
+            </h2>
+            <span className="font-mono text-[10px] text-[#525866]">
+              PROVIDER: {user?.provider || 'LOCAL'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="font-mono text-[10px] text-[#525866] uppercase tracking-wider">
+                HANDLE / NAME
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={user?.name || 'Dev User'}
+                className="w-full bg-[#0A0A0C] border border-white/[0.08] rounded px-3 py-2 font-mono text-xs text-[#F3F4F6] outline-none"
+              />
             </div>
-            <div>
-              <h2 className="text-base font-semibold text-[#EDEDEF]">Profile</h2>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-white/30">Account</p>
+
+            <div className="space-y-1">
+              <label className="font-mono text-[10px] text-[#525866] uppercase tracking-wider">
+                PRIMARY EMAIL
+              </label>
+              <input
+                type="email"
+                readOnly
+                value={user?.email || 'dev@yeap.srs'}
+                className="w-full bg-[#0A0A0C] border border-white/[0.08] rounded px-3 py-2 font-mono text-xs text-[#F3F4F6] outline-none"
+              />
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><span className="font-mono text-[10px] uppercase tracking-widest text-white/30">Name</span><p className="text-sm text-[#EDEDEF] mt-0.5">{user?.name || 'Dev User'}</p></div>
-            <div><span className="font-mono text-[10px] uppercase tracking-widest text-white/30">Email</span><p className="text-sm text-[#EDEDEF] mt-0.5">{user?.email || 'dev@local'}</p></div>
+
+          <div className="mt-5 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs">
+            <div className="flex flex-col">
+              <span className="font-mono text-[10px] text-[#525866] uppercase">Auth Token Version</span>
+              <span className="font-mono text-[11px] text-[#8A8F98]">v2.4.0-stable</span>
+            </div>
+            <button
+              onClick={() => {
+                void signOut();
+              }}
+              className="font-mono text-[11px] text-[#8A8F98] hover:text-[#F3F4F6] bg-[#0A0A0C] border border-white/[0.08] px-3 py-1.5 rounded transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <KeyRound size={12} />
+              <span>Rotate Session</span>
+            </button>
           </div>
         </Card>
 
-        {/* LeetCode */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-white/[0.06] border border-white/[0.08] flex items-center justify-center">
-              <Code size={18} className="text-[#8A8F98]" />
+        {/* Section 2: Data Source Binding (LeetCode) */}
+        <Card className="p-5 sm:p-6 noise-bg">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <Code size={16} className="text-[#bdc2ff]" />
+              <h2 className="font-mono text-[11px] font-medium text-[#8A8F98] uppercase tracking-wider">
+                Data Source Binding
+              </h2>
             </div>
-            <div>
-              <h2 className="text-base font-semibold text-[#EDEDEF]">LeetCode</h2>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-white/30">Account Link</p>
-            </div>
+            {user?.leetcodeUsername && !isEditing && (
+              <div className="flex items-center gap-1.5 font-mono text-[11px] text-[#4bdcc6] bg-[#4bdcc6]/10 border border-[#4bdcc6]/30 px-2.5 py-0.5 rounded">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4bdcc6] animate-pulse" />
+                <span>Connected: @{user.leetcodeUsername}</span>
+              </div>
+            )}
           </div>
 
+          <p className="font-mono text-xs text-[#8A8F98] mb-4">
+            Telemetry streams accepted submissions from your linked LeetCode profile into the SRS engine.
+          </p>
+
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
+            <div className="mb-4 p-3 rounded bg-[#FF375F]/10 border border-[#FF375F]/30 text-[#FF375F] font-mono text-xs">
               {error}
             </div>
           )}
 
           {!isEditing && user?.leetcodeUsername ? (
-            <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/[0.04] rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-white/30">Linked Username</span>
-                  <span className="text-sm font-medium text-[#EDEDEF] mt-0.5">{user.leetcodeUsername}</span>
-                </div>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-[#5E6AD2]/10 text-[#8B94E5] border border-[#5E6AD2]/20 uppercase tracking-wider font-mono">
-                  Connected
-                </span>
-              </div>
+            <div className="flex justify-end">
               <Button variant="secondary" onClick={() => setIsEditing(true)}>
-                Change Username
+                Re-bind Profile Handle
               </Button>
             </div>
           ) : (
@@ -163,72 +259,192 @@ export function SettingsPage() {
                 label="LeetCode Username"
                 value={leetcodeUsername}
                 onChange={(e) => setLeetcodeUsername(e.target.value)}
-                placeholder="e.g. your_leetcode_username"
+                placeholder="e.g. neetcode_dev"
                 disabled={loading}
                 required
               />
               <div className="flex items-center gap-3">
-                <Button type="submit" variant="secondary" disabled={loading}>
-                  {loading ? 'Saving...' : user?.leetcodeUsername ? 'Save Username' : 'Link Account'}
+                <Button type="submit" disabled={loading}>
+                  {loading ? 'Binding...' : user?.leetcodeUsername ? 'Update Binding' : 'Bind Profile'}
                 </Button>
                 {user?.leetcodeUsername && (
-                  <Button type="button" variant="ghost" onClick={() => {
-                    setLeetcodeUsername(user.leetcodeUsername || '');
-                    setIsEditing(false);
-                    setError(null);
-                  }} disabled={loading}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setLeetcodeUsername(user.leetcodeUsername || '');
+                      setIsEditing(false);
+                      setError(null);
+                    }}
+                    disabled={loading}
+                  >
                     Cancel
                   </Button>
                 )}
-                {saved && <span className="font-mono text-[10px] text-green-400">✓ Saved</span>}
+                {saved && (
+                  <span className="font-mono text-xs text-[#4bdcc6] flex items-center gap-1">
+                    <CheckCircle2 size={13} /> Saved
+                  </span>
+                )}
               </div>
             </form>
           )}
         </Card>
 
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-4"><div className="w-10 h-10 rounded-xl bg-[#5E6AD2]/10 border border-[#5E6AD2]/20 flex items-center justify-center"><Share2 size={18} className="text-[#8B94E5]" /></div><div><h2 className="text-base font-semibold text-[#EDEDEF]">Share progress</h2><p className="font-mono text-[10px] uppercase tracking-widest text-white/30">Opt-in public card</p></div></div>
-          <p className="text-sm text-[#8A8F98] mb-4">Create a public card with your solved count and longest streak. You can turn this off at any time.</p>
-          <label className="flex items-center gap-2 text-sm text-[#EDEDEF]"><input type="checkbox" checked={shareEnabled} disabled={sharing} onChange={(event) => void updateSharing(event.target.checked)} /> Enable public sharing</label>
-          {shareEnabled && trackers.length > 0 && <label className="mt-4 block text-xs text-[#8A8F98]">Highlight company readiness<select value={shareTrackerId ?? ''} onChange={(event) => { setShareTrackerId(event.target.value || null); void api.patch('/api/share/settings', { enabled: true, trackerId: event.target.value || null }); }} className="mt-1 block w-full rounded-lg border border-white/[0.1] bg-[#16171A] p-2 text-sm text-[#EDEDEF]"><option value="">No company highlight</option>{trackers.map((tracker) => <option key={tracker.id} value={tracker.id}>{tracker.companyName}</option>)}</select></label>}
-          {shareUrl && <div className="mt-4 flex gap-2"><Input value={shareUrl} readOnly aria-label="Public share link" /><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(shareUrl)}><Copy size={14} /> Copy</Button></div>}
+        {/* Section 3: Public Sharing */}
+        <Card className="p-5 sm:p-6 noise-bg">
+          <div className="flex items-center gap-2 mb-3">
+            <Share2 size={16} className="text-[#bdc2ff]" />
+            <h2 className="font-mono text-[11px] font-medium text-[#8A8F98] uppercase tracking-wider">
+              Public Telemetry Card
+            </h2>
+          </div>
+
+          <p className="font-mono text-xs text-[#8A8F98] mb-4">
+            Publish a read-only progress badge showing your active streaks and solve counts.
+          </p>
+
+          <label className="flex items-center gap-2.5 font-mono text-xs text-[#F3F4F6] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={shareEnabled}
+              disabled={sharing}
+              onChange={(e) => void updateSharing(e.target.checked)}
+              className="rounded border-white/[0.1] bg-[#0A0A0C] text-[#5e6ad2] focus:ring-0 cursor-pointer"
+            />
+            <span>Enable public sharing endpoint</span>
+          </label>
+
+          {shareEnabled && trackers.length > 0 && (
+            <div className="mt-4">
+              <label className="block font-mono text-[10px] uppercase text-[#8A8F98] mb-1">
+                Company Target Highlight
+              </label>
+              <select
+                value={shareTrackerId ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value || null;
+                  setShareTrackerId(val);
+                  void api.patch('/api/share/settings', { enabled: true, trackerId: val });
+                }}
+                className="w-full bg-[#0A0A0C] border border-white/[0.08] rounded p-2 font-mono text-xs text-[#F3F4F6] focus:border-[#bdc2ff] focus:outline-none"
+              >
+                <option value="">None (General Telemetry)</option>
+                {trackers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.companyName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {shareUrl && (
+            <div className="mt-4 flex gap-2">
+              <input
+                type="text"
+                readOnly
+                value={shareUrl}
+                aria-label="Public share link"
+                className="flex-1 bg-[#0A0A0C] border border-white/[0.08] rounded px-3 py-2 font-mono text-xs text-[#8A8F98]"
+              />
+              <Button variant="secondary" onClick={handleCopyShare}>
+                <Copy size={13} />
+                <span>{copied ? 'Copied' : 'Copy'}</span>
+              </Button>
+            </div>
+          )}
         </Card>
 
-        {/* Danger Zone */}
-        <Card className="p-6 border-red-500/20">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-              <AlertTriangle size={18} className="text-red-400" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-[#EDEDEF]">Danger Zone</h2>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-white/30">Irreversible</p>
-            </div>
+        {/* Section 4: Danger Zone */}
+        <Card className="p-5 sm:p-6 noise-bg border-[#FF375F]/20">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle size={16} className="text-[#FF375F]" />
+            <h2 className="font-mono text-[11px] font-medium text-[#FF375F] uppercase tracking-wider">
+              Irreversible Actions
+            </h2>
           </div>
-          <p className="text-sm text-[#8A8F98] mb-4">These actions are permanent and cannot be undone.</p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="danger" disabled>Reset All Progress</Button>
-            <Button variant="danger" onClick={() => { setDeleteOpen(true); setDeleteError(null); }}>Delete Account</Button>
-          </div>
-          <p className="font-mono text-[10px] text-white/20 mt-3">Account deletion is permanent. Your personal progress and sessions will be removed.</p>
+
+          <p className="font-mono text-xs text-[#8A8F98] mb-4">
+            Account deletion purges your historical review intervals, progress telemetry, and account credentials.
+          </p>
+
+          <Button
+            variant="danger"
+            onClick={() => {
+              setDeleteOpen(true);
+              setDeleteError(null);
+            }}
+          >
+            Delete Account
+          </Button>
 
           {deleteOpen && (
-            <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/10 p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-red-300">Confirm account deletion</h3>
-              <p className="text-xs text-red-200/80">This signs you out everywhere and cannot be undone.</p>
-              {deleteError && <p role="alert" className="text-xs text-red-300">{deleteError}</p>}
-              {user?.provider === 'LOCAL' ? (
-                <Input label="Current password" type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} disabled={deleting} autoComplete="current-password" />
-              ) : (
-                <p className="text-xs text-red-200/80">First confirm your identity again with {user?.provider === 'GOOGLE' ? 'Google' : 'GitHub'}.</p>
+            <div className="mt-5 rounded border border-[#FF375F]/30 bg-[#FF375F]/[0.05] p-4 space-y-3">
+              <h3 className="font-headline text-sm font-semibold text-[#FF375F]">
+                Confirm Account Purge
+              </h3>
+              <p className="font-mono text-xs text-[#8A8F98]">
+                This action is immediate and cannot be recovered.
+              </p>
+
+              {deleteError && (
+                <p role="alert" className="font-mono text-xs text-[#FF375F]">
+                  {deleteError}
+                </p>
               )}
-              <Input label="Type DELETE to confirm" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} disabled={deleting} autoComplete="off" />
-              <div className="flex gap-2">
-                <Button type="button" variant="ghost" disabled={deleting} onClick={() => setDeleteOpen(false)}>Cancel</Button>
+
+              {user?.provider === 'LOCAL' ? (
+                <Input
+                  label="Account Password"
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  disabled={deleting}
+                  autoComplete="current-password"
+                />
+              ) : (
+                <p className="font-mono text-xs text-[#8A8F98]">
+                  Re-authentication required via {user?.provider === 'GOOGLE' ? 'Google' : 'GitHub'}.
+                </p>
+              )}
+
+              <Input
+                label="Type DELETE to confirm"
+                value={deleteConfirmation}
+                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                disabled={deleting}
+                autoComplete="off"
+                placeholder="DELETE"
+              />
+
+              <div className="flex gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={deleting}
+                  onClick={() => setDeleteOpen(false)}
+                >
+                  Cancel
+                </Button>
                 {user?.provider === 'LOCAL' || searchParams.get('accountDeletion') === 'reauthenticated' ? (
-                  <Button type="button" variant="danger" disabled={deleting || deleteConfirmation !== 'DELETE'} onClick={deleteAccount}>{deleting ? 'Deleting...' : 'Permanently Delete Account'}</Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={deleting || deleteConfirmation !== 'DELETE'}
+                    onClick={deleteAccount}
+                  >
+                    {deleting ? 'Purging...' : 'Permanently Delete'}
+                  </Button>
                 ) : (
-                  <Button type="button" variant="danger" disabled={deleting} onClick={beginOAuthDeletionReauth}>{deleting ? 'Redirecting...' : 'Reauthenticate to Continue'}</Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    disabled={deleting}
+                    onClick={beginOAuthDeletionReauth}
+                  >
+                    {deleting ? 'Redirecting...' : 'Reauthenticate to Delete'}
+                  </Button>
                 )}
               </div>
             </div>

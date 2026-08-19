@@ -6,6 +6,7 @@ import type { AuthUser } from './lib/auth';
 import { api } from './lib/api';
 import { AppShell } from './components/layout/AppShell';
 import { LoginPage } from './pages/LoginPage';
+import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { HistoryPage } from './pages/HistoryPage';
@@ -48,15 +49,21 @@ function App() {
     <AuthContext.Provider value={authValue}>
       <BrowserRouter>
         <Routes>
+          {/* Public routes */}
+          <Route path="/" element={token ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+          <Route path="/login" element={token ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
-          <Route path="/login" element={<LoginPage />} />
+
+          {/* Protected routes — AppShell handles auth guard */}
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/review/:slug" element={<ReviewPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+          {/* Catch-all: authenticated → dashboard, public → home */}
+          <Route path="*" element={<Navigate to={token ? '/dashboard' : '/'} replace />} />
         </Routes>
         <Analytics />
       </BrowserRouter>
