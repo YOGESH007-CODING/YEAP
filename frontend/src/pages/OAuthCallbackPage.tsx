@@ -12,7 +12,8 @@
  *  1. Read `token` and `user` query params
  *  2. Decode the user object
  *  3. Sign in via AuthContext
- *  4. Strip the sensitive params from the URL and navigate to /dashboard
+ *  4. Strip the sensitive params from the URL
+ *  5. Navigate to /link-leetcode if no leetcodeUsername is set, otherwise /dashboard
  */
 
 import { useEffect, useRef } from 'react';
@@ -64,7 +65,10 @@ export function OAuthCallbackPage() {
 
     // Clean sensitive data out of the URL before navigating
     window.history.replaceState({}, '', '/oauth-callback');
-    navigate('/dashboard', { replace: true });
+
+    // Gate on LeetCode account being linked
+    const destination = user.leetcodeUsername ? '/dashboard' : '/link-leetcode';
+    navigate(destination, { replace: true });
   }, [signIn, navigate]);
 
   return null;

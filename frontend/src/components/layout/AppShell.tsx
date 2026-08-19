@@ -4,10 +4,15 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 
 export function AppShell() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Second gate: user must have a linked LeetCode account before accessing the app
+  if (!user?.leetcodeUsername) {
+    return <Navigate to="/link-leetcode" replace />;
   }
 
   return (

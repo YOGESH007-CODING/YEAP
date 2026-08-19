@@ -12,6 +12,7 @@ import { ReviewPage } from './pages/ReviewPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { OAuthCallbackPage } from './pages/OAuthCallbackPage';
+import { LinkLeetcodePage } from './pages/LinkLeetcodePage';
 
 function App() {
   const [token, setToken] = useState<string | null>(null);
@@ -35,6 +36,9 @@ function App() {
     await api.post('/api/auth/logout').catch(() => {});
   }, []);
 
+  // A session is only fully ready when the user has also linked a LeetCode account
+  const hasLinkedLeetcode = !!token && !!user?.leetcodeUsername;
+
   const authValue = useMemo(() => ({
     user,
     token,
@@ -50,11 +54,26 @@ function App() {
       <BrowserRouter>
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={token ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
-          <Route path="/login" element={token ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
+          <Route path="/" element={hasLinkedLeetcode ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+          <Route path="/login" element={hasLinkedLeetcode ? <Navigate to="/dashboard" replace /> : <LoginPage />} />
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
 
-          {/* Protected routes — AppShell handles auth guard */}
+          {/*
+           * Link LeetCode — accessible when logged in but no leetcodeUsername yet.
+           * Authenticated users who already have it are bounced to /dashboard.
+           */}
+          <Route
+            path="/link-leetcode"
+            element={
+              !token
+                ? <Navigate to="/login" replace />
+                : hasLinkedLeetcode
+                  ? <Navigate to="/dashboard" replace />
+                  : <LinkLeetcodePage />
+            }
+          />
+
+          {/* Protected routes — AppShell handles auth guard + LeetCode gate */}
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/review/:slug" element={<ReviewPage />} />
@@ -62,8 +81,16 @@ function App() {
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
 
-          {/* Catch-all: authenticated → dashboard, public → home */}
-          <Route path="*" element={<Navigate to={token ? '/dashboard' : '/'} replace />} />
+          {/* Catch-all: fully set-up users → dashboard, logged-in but unlinked → link-leetcode, public → home */}
+          <Route
+            path="*"
+            element={
+              <Navigate
+                to={hasLinkedLeetcode ? '/dashboard' : token ? '/link-leetcode' : '/'}
+                replace
+              />
+            }
+          />
         </Routes>
         <Analytics />
       </BrowserRouter>
