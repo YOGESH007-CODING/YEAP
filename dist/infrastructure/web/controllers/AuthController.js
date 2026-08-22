@@ -298,7 +298,10 @@ class AuthController {
                 }
                 const user = await findOrCreateOAuthUser(profile);
                 const session = await issueTokens(prismaClient_1.prisma, user);
-                res.cookie('yeap_refresh', session.refreshToken, refreshCookie).redirect(`${frontendUrl()}/dashboard`);
+                const redirectUrl = new URL(`${frontendUrl()}/oauth-callback`);
+                redirectUrl.searchParams.set('token', session.accessToken);
+                redirectUrl.searchParams.set('user', Buffer.from(JSON.stringify(session.user)).toString('base64url'));
+                res.cookie('yeap_refresh', session.refreshToken, refreshCookie).redirect(redirectUrl.toString());
             }
             catch {
                 oauthFailure(res, 'oauth_sign_in_failed');

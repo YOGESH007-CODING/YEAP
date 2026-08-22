@@ -7,6 +7,7 @@
 
 import express, { type Request, type Response, type NextFunction } from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { logger } from './shared/utils/logger';
 import reviewRoutes from './infrastructure/web/routes/reviewRoutes';
 import problemRoutes from './infrastructure/web/routes/problemRoutes';
@@ -30,6 +31,11 @@ export const createApp = () => {
       credentials: true,
     }),
   );
+
+  // Gzip/deflate JSON responses. The heaviest reads (review history, tracker
+  // summaries) are large JSON payloads; compression typically shrinks them
+  // 70–85% over the wire. See PERFORMANCE.md E6.
+  app.use(compression());
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true }));

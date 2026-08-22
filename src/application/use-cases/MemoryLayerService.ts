@@ -14,22 +14,34 @@ export const calculateMasteryScore = (total: number, correct: number, mistakes: 
 export class MemoryLayerService {
   constructor(private readonly db: PrismaClient) {}
 
-  async recordReview(userId: string, problemId: string, qualityScore: number, mistake?: MistakeInput): Promise<void> {
-    const problem = await this.db.problem.findUniqueOrThrow({ where: { id: problemId }, select: { topicTags: true } });
+  /**
+   * Records a review's memory signals (mistakes + per-topic mastery).
+   *
+   * `topicTags` is passed in by the caller, which already holds the Problem
+   * (ReviewUseCaseProcessor / ReportProblemUseCase both fetch it) — so we avoid
+   * a redundant `problem.findUniqueOrThrow` on the hot path (see PERFORMANCE.md E3).
+   */
+  async recordReview(userId: string, problemId: string, topicTags: string[], qualityScore: number, mistake?: MistakeInput): Promise<void> {
     const now = new Date();
     await this.db.$transaction(async (tx) => {
       if (mistake && qualityScore <= 2) {
         await tx.userMistake.upsert({
           where: { userId_problemId_mistakeType: { userId, problemId, mistakeType: mistake.type } },
-          create: { userId, problemId, topicName: problem.topicTags[0] ?? 'Uncategorized', mistakeType: mistake.type, description: mistake.description },
+          create: { userId, problemId, topicName: topicTags[0] ?? 'Uncategorized', mistakeType: mistake.type, description: mistake.description },
           update: { recurrenceCount: { increment: 1 }, createdAt: now, description: mistake.description ?? undefined, resolvedAt: null },
         });
       }
       // A successful recall resolves all unresolved mistakes for this problem.
       if (qualityScore >= 3) await tx.userMistake.updateMany({ where: { userId, problemId, resolvedAt: null }, data: { resolvedAt: now } });
 
-      for (const topicName of problem.topicTags) {
-        const prior = await tx.userTopicMastery.findUnique({ where: { userId_topicName: { userId, topicName } } });
+      // M7: read every topic's prior mastery in ONE query, compute in memory,
+      // then upsert. Previously this ran findUnique+upsert per topic (2T queries,
+      // serialized while holding the transaction open); now it's T+1.
+      const priors = await tx.userTopicMastery.findMany({ where: { userId, topicName: { in: topicTags } } });
+      const priorByTopic = new Map(priors.map((p) => [p.topicName, p]));
+
+      for (const topicName of topicTags) {
+        const prior = priorByTopic.get(topicName);
         const totalAttempts = (prior?.totalAttempts ?? 0) + 1;
         const correctAttempts = (prior?.correctAttempts ?? 0) + (qualityScore >= 3 ? 1 : 0);
         const mistakeCount = (prior?.mistakeCount ?? 0) + (mistake && qualityScore <= 2 ? 1 : 0);

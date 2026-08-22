@@ -14,7 +14,7 @@
  */
 
 import type { ILeetCodeClient, LeetCodeSubmission } from '../../domain/interfaces/ILeetCodeClient';
-import type { IProblemProgressRepository } from '../../domain/interfaces/IProblemProgressRepository';
+import type { IProblemProgressRepository, ProblemProgressDto } from '../../domain/interfaces/IProblemProgressRepository';
 import type { IProblemRepository, Difficulty } from '../../domain/interfaces/IProblemRepository';
 import type { IUserRepository } from '../../domain/interfaces/IUserRepository';
 import type { SyncResponseDto, SyncedProblemDto } from '../dtos/SyncSubmissionsDto';
@@ -105,7 +105,7 @@ export class SyncSubmissionsUseCase {
 
     for (const submission of uniqueBySlug) {
       try {
-        const result = await this.processSubmission(userId, submission);
+        const { dto: result, progress } = await this.processSubmission(userId, submission);
 
         if (result.status === 'newly_tracked') {
           newlyTracked.push(result);
@@ -113,11 +113,8 @@ export class SyncSubmissionsUseCase {
         } else {
           alreadyTracked.push(result);
 
-          // Check if this problem needs a quality score today
-          const progress = await this.progressRepo.findByUserAndProblem(
-            userId,
-            result.problemId,
-          );
+          // Reuse the progress record processSubmission already read — no second
+          // findByUserAndProblem round-trip for the same (userId, problemId). See E4.
           if (progress && !this.wasReviewedToday(progress.lastReviewedAt)) {
             pendingQualityScores.push(result);
           }
@@ -168,7 +165,7 @@ export class SyncSubmissionsUseCase {
   private async processSubmission(
     userId: string,
     submission: LeetCodeSubmission,
-  ): Promise<SyncedProblemDto> {
+  ): Promise<{ dto: SyncedProblemDto; progress: ProblemProgressDto | null }> {
     const submittedAt = new Date(parseInt(submission.timestamp, 10) * 1000).toISOString();
 
     // ── Ensure Problem exists in DB ──────────────────────────────────────
@@ -196,25 +193,31 @@ export class SyncSubmissionsUseCase {
 
     if (existingProgress) {
       return {
+        dto: {
+          problemId: problem.id,
+          slug: problem.slug,
+          title: problem.title,
+          difficulty: problem.difficulty,
+          submittedAt,
+          status: 'already_tracked',
+        },
+        progress: existingProgress,
+      };
+    }
+
+    // ── Auto-track: create ProblemProgress with defaults ─────────────────
+    const created = await this.progressRepo.findOrCreate(userId, problem.id);
+
+    return {
+      dto: {
         problemId: problem.id,
         slug: problem.slug,
         title: problem.title,
         difficulty: problem.difficulty,
         submittedAt,
-        status: 'already_tracked',
-      };
-    }
-
-    // ── Auto-track: create ProblemProgress with defaults ─────────────────
-    await this.progressRepo.findOrCreate(userId, problem.id);
-
-    return {
-      problemId: problem.id,
-      slug: problem.slug,
-      title: problem.title,
-      difficulty: problem.difficulty,
-      submittedAt,
-      status: 'newly_tracked',
+        status: 'newly_tracked',
+      },
+      progress: created,
     };
   }
 

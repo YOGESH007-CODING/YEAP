@@ -17,6 +17,7 @@ export interface DailyReviewJobData {
 }
 
 let redisClient: Redis | null = null;
+let workerConnection: Redis | null = null;
 let dailyReviewQueue: Queue<DailyReviewJobData> | null = null;
 
 /**
@@ -51,6 +52,40 @@ export const getRedisConnection = (): Redis => {
   }
 
   return redisClient;
+};
+
+/**
+ * Returns a dedicated Redis connection for the BullMQ Worker.
+ *
+ * BullMQ Workers issue *blocking* Redis commands; sharing a single connection
+ * with the Queue can cause head-of-line blocking. Giving the Worker its own
+ * connection is BullMQ's documented recommendation. See PERFORMANCE.md M8.
+ */
+export const getWorkerConnection = (): Redis => {
+  if (workerConnection) {
+    return workerConnection;
+  }
+
+  const redisUrl = process.env['REDIS_URL'];
+  if (!redisUrl) {
+    throw new Error('REDIS_URL environment variable is required to connect to Redis.');
+  }
+
+  logger.info('[Redis] Initializing dedicated worker Redis connection...');
+
+  workerConnection = new Redis(redisUrl, {
+    maxRetriesPerRequest: null, // Required by BullMQ
+    enableReadyCheck: false,
+    tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+  });
+
+  if (typeof workerConnection.on === 'function') {
+    workerConnection.on('error', (err) => {
+      logger.error(`[Redis] Worker connection error: ${err.message}`);
+    });
+  }
+
+  return workerConnection;
 };
 
 /**
@@ -136,5 +171,11 @@ export const closeQueue = async (): Promise<void> => {
     await redisClient.quit();
     redisClient = null;
     logger.info('[Redis] Client connection closed.');
+  }
+
+  if (workerConnection) {
+    await workerConnection.quit();
+    workerConnection = null;
+    logger.info('[Redis] Worker connection closed.');
   }
 };

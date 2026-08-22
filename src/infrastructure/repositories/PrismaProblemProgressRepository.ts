@@ -121,6 +121,10 @@ export class PrismaProblemProgressRepository implements IProblemProgressReposito
   async findAllDue(perUserLimit: number): Promise<DueProgressWithProblem[]> {
     const now = new Date();
 
+    // 0 means "no cap" (matching findDueByUser). Without this, `row_number <= 0`
+    // would silently match nothing and the daily run would dispatch zero items.
+    const cap = perUserLimit > 0 ? perUserLimit : Number.MAX_SAFE_INTEGER;
+
     // Apply the per-user cap in PostgreSQL. Fetching every overdue row and
     // trimming in Node allows a large shared backlog to exhaust worker memory.
     const records = await this.db.$queryRaw<DueProgressWithProblem[]>`
@@ -153,11 +157,54 @@ export class PrismaProblemProgressRepository implements IProblemProgressReposito
         WHERE pp."dueDate" <= ${now}
       ) ranked
       INNER JOIN problems p ON p.id = ranked."problemId"
-      WHERE ranked.row_number <= ${perUserLimit}
+      WHERE ranked.row_number <= ${cap}
       ORDER BY ranked."userId" ASC, ranked."easinessFactor" ASC, ranked."dueDate" ASC
     `;
 
     return records;
+  }
+
+  async countGroupedByUser(userIds: string[]): Promise<Map<string, number>> {
+    if (userIds.length === 0) return new Map();
+
+    const groups = await this.db.problemProgress.groupBy({
+      by: ['userId'],
+      where: { userId: { in: userIds } },
+      _count: { _all: true },
+    });
+
+    return new Map(groups.map((group) => [group.userId, group._count._all]));
+  }
+
+  async countDueGroupedByUser(): Promise<Map<string, number>> {
+    const groups = await this.db.problemProgress.groupBy({
+      by: ['userId'],
+      where: { dueDate: { lte: new Date() } },
+      _count: { _all: true },
+    });
+
+    return new Map(groups.map((group) => [group.userId, group._count._all]));
+  }
+
+  async createManyForUser(userId: string, problemIds: string[]): Promise<number> {
+    if (problemIds.length === 0) return 0;
+
+    const now = new Date();
+    const { count } = await this.db.problemProgress.createMany({
+      // skipDuplicates relies on the userId_problemId unique constraint, which
+      // keeps this idempotent across worker retries just like findOrCreate was.
+      skipDuplicates: true,
+      data: problemIds.map((problemId) => ({
+        userId,
+        problemId,
+        repetitions: 0,
+        easinessFactor: EF_DEFAULT,
+        intervalDays: 1,
+        dueDate: now,
+      })),
+    });
+
+    return count;
   }
 
   async atomicFindAndUpdate(
@@ -181,9 +228,15 @@ export class PrismaProblemProgressRepository implements IProblemProgressReposito
         FOR UPDATE
       `;
 
-      let current: ProblemProgress;
-
-      current = rows[0]!;
+      // The upsert above guarantees a row exists inside this transaction, so an
+      // empty result means something deleted it concurrently. Fail loudly rather
+      // than dereferencing undefined further down.
+      const current = rows[0];
+      if (!current) {
+        throw new Error(
+          `[ProblemProgress] Row missing after upsert for user ${userId} / problem ${problemId}.`,
+        );
+      }
 
       const updateData = updater(toDto(current));
 
@@ -231,6 +284,48 @@ export class PrismaProblemProgressRepository implements IProblemProgressReposito
         companyTags: r.problem.companyTags,
       },
     }));
+  }
+
+  async findPageByUser(
+    userId: string,
+    limit: number,
+    offset: number,
+  ): Promise<DueProgressWithProblem[]> {
+    const records = await this.db.problemProgress.findMany({
+      where: { userId },
+      include: {
+        problem: {
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            difficulty: true,
+            topicTags: true,
+            companyTags: true,
+          },
+        },
+      },
+      orderBy: [{ dueDate: 'asc' }, { id: 'asc' }], // Stable order across pages
+      skip: offset,
+      take: limit,
+    });
+
+    return records.map((r) => ({
+      ...toDto(r),
+      problem: {
+        id: r.problem.id,
+        slug: r.problem.slug,
+        title: r.problem.title,
+        difficulty: r.problem.difficulty,
+        topicTags: r.problem.topicTags,
+        companyTags: r.problem.companyTags,
+      },
+    }));
+  }
+
+  async countByUser(userId: string): Promise<number> {
+    // Index-only count — no row materialization, no problem join.
+    return this.db.problemProgress.count({ where: { userId } });
   }
 
 }

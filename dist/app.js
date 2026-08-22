@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createApp = void 0;
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const compression_1 = __importDefault(require("compression"));
 const logger_1 = require("./shared/utils/logger");
 const reviewRoutes_1 = __importDefault(require("./infrastructure/web/routes/reviewRoutes"));
 const problemRoutes_1 = __importDefault(require("./infrastructure/web/routes/problemRoutes"));
@@ -30,6 +31,10 @@ const createApp = () => {
         origin: process.env['ALLOWED_ORIGINS']?.split(',') ?? ['http://localhost:3001'],
         credentials: true,
     }));
+    // Gzip/deflate JSON responses. The heaviest reads (review history, tracker
+    // summaries) are large JSON payloads; compression typically shrinks them
+    // 70–85% over the wire. See PERFORMANCE.md E6.
+    app.use((0, compression_1.default)());
     app.use(express_1.default.json({ limit: '1mb' }));
     app.use(express_1.default.urlencoded({ extended: true }));
     app.use(requestContext_1.requestContext);

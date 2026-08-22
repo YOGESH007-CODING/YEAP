@@ -18,6 +18,7 @@ import { PrismaProblemRepository } from '../repositories/PrismaProblemRepository
 import { PrismaUserRepository } from '../repositories/PrismaUserRepository';
 import { ResendNotificationProvider } from '../external/ResendNotificationProvider';
 import { QueueCompilationEngine } from '../../application/use-cases/QueueCompilationEngine';
+import { createMasteryLookup } from './masteryLookup';
 import { logger } from '../../shared/utils/logger';
 
 const runOnce = async (): Promise<void> => {
@@ -34,6 +35,9 @@ const runOnce = async (): Promise<void> => {
       problemRepository: problemRepo,
       userRepository: userRepo,
       notificationProvider,
+      // Same mastery-aware prioritisation as the BullMQ worker — this runner
+      // previously omitted it and fell back to a neutral 50 for every topic.
+      masteryLookup: createMasteryLookup(prisma),
     });
 
     const result = await engine.execute();

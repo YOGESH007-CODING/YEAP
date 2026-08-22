@@ -16,6 +16,14 @@ export interface DailyReviewJobData {
  */
 export declare const getRedisConnection: () => Redis;
 /**
+ * Returns a dedicated Redis connection for the BullMQ Worker.
+ *
+ * BullMQ Workers issue *blocking* Redis commands; sharing a single connection
+ * with the Queue can cause head-of-line blocking. Giving the Worker its own
+ * connection is BullMQ's documented recommendation. See PERFORMANCE.md M8.
+ */
+export declare const getWorkerConnection: () => Redis;
+/**
  * Verifies active connectivity to Redis.
  */
 export declare const verifyRedisConnection: () => Promise<boolean>;

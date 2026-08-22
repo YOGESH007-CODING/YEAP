@@ -239,7 +239,7 @@ export function LandingPage() {
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-[#525866]">
           <div className="flex items-center gap-2">
             <span className="text-[#bdc2ff] font-bold">YEAP</span>
-            <span>· Advanced Developer SRS</span>
+            <span>· Your Early AM Practice</span>
           </div>
           <div>v2.4.0-stable · SM-2 Algorithm</div>
         </div>

@@ -81,10 +81,9 @@ exports.ReviewController = {
         // ── 3. Execute use case ──────────────────────────────────────────────
         try {
             const verifyWithLeetCode = req.body.verifyWithLeetCode === true;
-            const existingProgress = await prismaClient_1.prisma.problemProgress.findUnique({ where: { userId_problemId: { userId: req.userId, problemId: parseResult.data.problemId } }, select: { dueDate: true } });
             const result = await reviewProcessor.execute(req.userId, parseResult.data, verifyWithLeetCode);
-            await memoryLayer.recordReview(req.userId, result.data.problemId, parseResult.data.qualityScore, parseResult.data.mistake);
-            await StreakController_1.StreakController.evaluateAfterReview(req.userId, Boolean(existingProgress && existingProgress.dueDate <= new Date()));
+            await memoryLayer.recordReview(req.userId, result.data.problemId, result.data.topicTags, parseResult.data.qualityScore, parseResult.data.mistake);
+            await StreakController_1.StreakController.evaluateAfterReview(req.userId, result.data.wasDue);
             logger_1.logger.info(`[ReviewController] User ${req.userId} reviewed problem ${parseResult.data.problemId} ` +
                 `with quality=${parseResult.data.qualityScore} (verified=${verifyWithLeetCode}). ` +
                 `Next due: ${result.data.nextDueDate}`);
@@ -125,7 +124,7 @@ exports.ReviewController = {
         }
         try {
             const dueItems = await progressRepository.findDueByUser(req.userId, 20);
-            const allTracked = await progressRepository.findAllByUser(req.userId);
+            const totalTracked = await progressRepository.countByUser(req.userId);
             const bonusQuestions = dueItems.length < 5
                 ? await problemRepository.getUnseenProblems(req.userId, 5 - dueItems.length, ['google', 'amazon', 'apple', 'meta', 'netflix'])
                 : [];
@@ -133,7 +132,7 @@ exports.ReviewController = {
                 success: true,
                 data: {
                     count: dueItems.length,
-                    totalTracked: allTracked.length,
+                    totalTracked,
                     bonusQuestions,
                     items: dueItems.map((item) => ({
                         progressId: item.id,
@@ -260,7 +259,7 @@ exports.ReviewController = {
         }
         try {
             const result = await reportProcessor.execute(req.userId, parseResult.data);
-            await memoryLayer.recordReview(req.userId, result.data.problemId, parseResult.data.qualityScore, parseResult.data.mistake);
+            await memoryLayer.recordReview(req.userId, result.data.problemId, result.data.topicTags, parseResult.data.qualityScore, parseResult.data.mistake);
             logger_1.logger.info(`[ReviewController] User ${req.userId} reported problem "${parseResult.data.problemSlug}" ` +
                 `with quality=${parseResult.data.qualityScore}. Next due: ${result.data.nextDueDate}`);
             res.status(200).json(result);
@@ -343,8 +342,14 @@ exports.ReviewController = {
     /**
      * GET /api/review/history
      *
-     * Returns ALL tracked problems for the authenticated user (no due-date filter).
-     * The frontend handles filtering/sorting client-side.
+     * Returns the authenticated user's tracked problems (no due-date filter),
+     * ordered by dueDate ASC.
+     *
+     * Pagination is **opt-in and backward-compatible** (PERFORMANCE.md M6):
+     *   • No `limit` query param → returns the full list, exactly as before.
+     *   • `?limit=N` (optionally `&offset=M`) → returns one page plus
+     *     `limit`, `offset`, and `hasMore` metadata so the client can page.
+     * In both modes `count` is the user's total tracked-problem count.
      */
     async getHistory(req, res) {
         if (!req.userId) {
@@ -352,11 +357,49 @@ exports.ReviewController = {
             return;
         }
         try {
-            const items = await progressRepository.findAllByUser(req.userId);
+            // Legacy mode: no `limit` → return everything (unchanged contract).
+            if (req.query['limit'] === undefined) {
+                const items = await progressRepository.findAllByUser(req.userId);
+                res.status(200).json({
+                    success: true,
+                    data: {
+                        count: items.length,
+                        items: items.map((item) => ({
+                            progressId: item.id,
+                            problem: item.problem,
+                            easinessFactor: item.easinessFactor,
+                            intervalDays: item.intervalDays,
+                            repetitions: item.repetitions,
+                            dueDate: item.dueDate.toISOString(),
+                            lastReviewedAt: item.lastReviewedAt?.toISOString() ?? null,
+                        })),
+                    },
+                });
+                return;
+            }
+            // Paginated mode.
+            const requestedLimit = Number(req.query['limit']);
+            if (!Number.isInteger(requestedLimit) || requestedLimit < 1) {
+                res.status(400).json({ success: false, error: 'limit must be a positive integer.' });
+                return;
+            }
+            const limit = Math.min(requestedLimit, 200); // Cap payload size
+            const offset = req.query['offset'] === undefined ? 0 : Number(req.query['offset']);
+            if (!Number.isInteger(offset) || offset < 0) {
+                res.status(400).json({ success: false, error: 'offset must be a non-negative integer.' });
+                return;
+            }
+            const [items, total] = await Promise.all([
+                progressRepository.findPageByUser(req.userId, limit, offset),
+                progressRepository.countByUser(req.userId),
+            ]);
             res.status(200).json({
                 success: true,
                 data: {
-                    count: items.length,
+                    count: total,
+                    limit,
+                    offset,
+                    hasMore: offset + items.length < total,
                     items: items.map((item) => ({
                         progressId: item.id,
                         problem: item.problem,

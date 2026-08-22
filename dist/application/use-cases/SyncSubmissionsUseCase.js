@@ -69,15 +69,15 @@ class SyncSubmissionsUseCase {
         const pendingQualityScores = [];
         for (const submission of uniqueBySlug) {
             try {
-                const result = await this.processSubmission(userId, submission);
+                const { dto: result, progress } = await this.processSubmission(userId, submission);
                 if (result.status === 'newly_tracked') {
                     newlyTracked.push(result);
                     pendingQualityScores.push(result);
                 }
                 else {
                     alreadyTracked.push(result);
-                    // Check if this problem needs a quality score today
-                    const progress = await this.progressRepo.findByUserAndProblem(userId, result.problemId);
+                    // Reuse the progress record processSubmission already read — no second
+                    // findByUserAndProblem round-trip for the same (userId, problemId). See E4.
                     if (progress && !this.wasReviewedToday(progress.lastReviewedAt)) {
                         pendingQualityScores.push(result);
                     }
@@ -136,23 +136,29 @@ class SyncSubmissionsUseCase {
         const existingProgress = await this.progressRepo.findByUserAndProblem(userId, problem.id);
         if (existingProgress) {
             return {
+                dto: {
+                    problemId: problem.id,
+                    slug: problem.slug,
+                    title: problem.title,
+                    difficulty: problem.difficulty,
+                    submittedAt,
+                    status: 'already_tracked',
+                },
+                progress: existingProgress,
+            };
+        }
+        // ── Auto-track: create ProblemProgress with defaults ─────────────────
+        const created = await this.progressRepo.findOrCreate(userId, problem.id);
+        return {
+            dto: {
                 problemId: problem.id,
                 slug: problem.slug,
                 title: problem.title,
                 difficulty: problem.difficulty,
                 submittedAt,
-                status: 'already_tracked',
-            };
-        }
-        // ── Auto-track: create ProblemProgress with defaults ─────────────────
-        await this.progressRepo.findOrCreate(userId, problem.id);
-        return {
-            problemId: problem.id,
-            slug: problem.slug,
-            title: problem.title,
-            difficulty: problem.difficulty,
-            submittedAt,
-            status: 'newly_tracked',
+                status: 'newly_tracked',
+            },
+            progress: created,
         };
     }
     /**

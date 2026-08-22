@@ -16,7 +16,7 @@ const PrismaUserRepository_1 = require("../repositories/PrismaUserRepository");
 const ResendNotificationProvider_1 = require("../external/ResendNotificationProvider");
 const QueueCompilationEngine_1 = require("../../application/use-cases/QueueCompilationEngine");
 const logger_1 = require("../../shared/utils/logger");
-const MemoryLayerService_1 = require("../../application/use-cases/MemoryLayerService");
+const masteryLookup_1 = require("./masteryLookup");
 let workerInstance = null;
 /**
  * Creates and starts the BullMQ daily review worker process.
@@ -25,7 +25,9 @@ const createDailyQueueWorker = () => {
     if (workerInstance) {
         return workerInstance;
     }
-    const connection = (0, queueSetup_1.getRedisConnection)();
+    // BullMQ Workers need their own Redis connection (separate from the Queue's)
+    // to avoid blocking-command head-of-line contention. See PERFORMANCE.md M8.
+    const connection = (0, queueSetup_1.getWorkerConnection)();
     logger_1.logger.info(`[DailyQueueWorker] Starting BullMQ worker listening on "${queueSetup_1.QUEUE_NAME}"...`);
     workerInstance = new bullmq_1.Worker(queueSetup_1.QUEUE_NAME, async (job) => {
         logger_1.logger.info(`[DailyQueueWorker] Processing job ${job.id} (name: ${job.name})...`);
@@ -40,10 +42,7 @@ const createDailyQueueWorker = () => {
             problemRepository: problemRepo,
             userRepository: userRepo,
             notificationProvider,
-            masteryLookup: async (userId, topics) => {
-                const records = await prismaClient_1.prisma.userTopicMastery.findMany({ where: { userId, topicName: { in: topics } }, select: { topicName: true, totalAttempts: true, correctAttempts: true, mistakeCount: true, lastPracticedAt: true } });
-                return new Map(records.map((record) => [record.topicName, (0, MemoryLayerService_1.calculateMasteryScore)(record.totalAttempts, record.correctAttempts, record.mistakeCount, record.lastPracticedAt)]));
-            },
+            masteryLookup: (0, masteryLookup_1.createMasteryLookup)(prismaClient_1.prisma),
         });
         // 3. Execute daily queue compilation
         const result = await engine.execute();

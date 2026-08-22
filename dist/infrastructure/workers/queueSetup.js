@@ -9,12 +9,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.closeQueue = exports.registerDailyJob = exports.getDailyReviewQueue = exports.verifyRedisConnection = exports.getRedisConnection = exports.QUEUE_NAME = void 0;
+exports.closeQueue = exports.registerDailyJob = exports.getDailyReviewQueue = exports.verifyRedisConnection = exports.getWorkerConnection = exports.getRedisConnection = exports.QUEUE_NAME = void 0;
 const bullmq_1 = require("bullmq");
 const ioredis_1 = __importDefault(require("ioredis"));
 const logger_1 = require("../../shared/utils/logger");
 exports.QUEUE_NAME = 'daily-review-queue';
 let redisClient = null;
+let workerConnection = null;
 let dailyReviewQueue = null;
 /**
  * Creates or returns the singleton ioredis client connection.
@@ -44,6 +45,35 @@ const getRedisConnection = () => {
     return redisClient;
 };
 exports.getRedisConnection = getRedisConnection;
+/**
+ * Returns a dedicated Redis connection for the BullMQ Worker.
+ *
+ * BullMQ Workers issue *blocking* Redis commands; sharing a single connection
+ * with the Queue can cause head-of-line blocking. Giving the Worker its own
+ * connection is BullMQ's documented recommendation. See PERFORMANCE.md M8.
+ */
+const getWorkerConnection = () => {
+    if (workerConnection) {
+        return workerConnection;
+    }
+    const redisUrl = process.env['REDIS_URL'];
+    if (!redisUrl) {
+        throw new Error('REDIS_URL environment variable is required to connect to Redis.');
+    }
+    logger_1.logger.info('[Redis] Initializing dedicated worker Redis connection...');
+    workerConnection = new ioredis_1.default(redisUrl, {
+        maxRetriesPerRequest: null, // Required by BullMQ
+        enableReadyCheck: false,
+        tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+    });
+    if (typeof workerConnection.on === 'function') {
+        workerConnection.on('error', (err) => {
+            logger_1.logger.error(`[Redis] Worker connection error: ${err.message}`);
+        });
+    }
+    return workerConnection;
+};
+exports.getWorkerConnection = getWorkerConnection;
 /**
  * Verifies active connectivity to Redis.
  */
@@ -118,6 +148,11 @@ const closeQueue = async () => {
         await redisClient.quit();
         redisClient = null;
         logger_1.logger.info('[Redis] Client connection closed.');
+    }
+    if (workerConnection) {
+        await workerConnection.quit();
+        workerConnection = null;
+        logger_1.logger.info('[Redis] Worker connection closed.');
     }
 };
 exports.closeQueue = closeQueue;

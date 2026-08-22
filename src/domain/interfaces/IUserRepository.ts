@@ -36,6 +36,12 @@ export interface UpdateUserDto {
 
 export interface IUserRepository {
   findAll(): Promise<UserDto[]>;
+  /**
+   * Returns only non-soft-deleted users (deletedAt IS NULL). The daily worker
+   * must use this so it doesn't fan out queries and notifications for deleted
+   * accounts. `findAll()` is retained for admin/auth paths that need everyone.
+   */
+  findActive(): Promise<UserDto[]>;
   findById(id: string): Promise<UserDto | null>;
   findByEmail(email: string): Promise<UserDto | null>;
   findByProvider(provider: UserDto['provider'], providerId: string): Promise<UserDto | null>;

@@ -6,7 +6,7 @@
  */
 
 import { Worker, Job } from 'bullmq';
-import { QUEUE_NAME, getRedisConnection, DailyReviewJobData } from './queueSetup';
+import { QUEUE_NAME, getWorkerConnection, DailyReviewJobData } from './queueSetup';
 import { prisma } from '../database/prismaClient';
 import { PrismaProblemProgressRepository } from '../repositories/PrismaProblemProgressRepository';
 import { PrismaProblemRepository } from '../repositories/PrismaProblemRepository';
@@ -14,7 +14,7 @@ import { PrismaUserRepository } from '../repositories/PrismaUserRepository';
 import { ResendNotificationProvider } from '../external/ResendNotificationProvider';
 import { QueueCompilationEngine, CompilationResult } from '../../application/use-cases/QueueCompilationEngine';
 import { logger } from '../../shared/utils/logger';
-import { calculateMasteryScore } from '../../application/use-cases/MemoryLayerService';
+import { createMasteryLookup } from './masteryLookup';
 
 let workerInstance: Worker<DailyReviewJobData, CompilationResult> | null = null;
 
@@ -26,7 +26,9 @@ export const createDailyQueueWorker = (): Worker<DailyReviewJobData, Compilation
     return workerInstance;
   }
 
-  const connection = getRedisConnection();
+  // BullMQ Workers need their own Redis connection (separate from the Queue's)
+  // to avoid blocking-command head-of-line contention. See PERFORMANCE.md M8.
+  const connection = getWorkerConnection();
 
   logger.info(`[DailyQueueWorker] Starting BullMQ worker listening on "${QUEUE_NAME}"...`);
 
@@ -47,10 +49,7 @@ export const createDailyQueueWorker = (): Worker<DailyReviewJobData, Compilation
         problemRepository: problemRepo,
         userRepository: userRepo,
         notificationProvider,
-        masteryLookup: async (userId, topics) => {
-          const records = await prisma.userTopicMastery.findMany({ where: { userId, topicName: { in: topics } }, select: { topicName: true, totalAttempts: true, correctAttempts: true, mistakeCount: true, lastPracticedAt: true } });
-          return new Map(records.map((record) => [record.topicName, calculateMasteryScore(record.totalAttempts, record.correctAttempts, record.mistakeCount, record.lastPracticedAt)]));
-        },
+        masteryLookup: createMasteryLookup(prisma),
       });
 
       // 3. Execute daily queue compilation

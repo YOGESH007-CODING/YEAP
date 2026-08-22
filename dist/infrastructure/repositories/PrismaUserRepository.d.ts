@@ -10,6 +10,7 @@ export declare class PrismaUserRepository implements IUserRepository {
     private readonly db;
     constructor(db: PrismaClient);
     findAll(): Promise<UserDto[]>;
+    findActive(): Promise<UserDto[]>;
     findById(id: string): Promise<UserDto | null>;
     findByEmail(email: string): Promise<UserDto | null>;
     findByProvider(provider: UserDto['provider'], providerId: string): Promise<UserDto | null>;

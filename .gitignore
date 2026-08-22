@@ -6,4 +6,5 @@ dist
 .DS_Store
 coverage
 *.log
-
+PERFORMANCE.md
+changes.md

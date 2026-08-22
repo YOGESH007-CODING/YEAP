@@ -58,8 +58,14 @@ export declare const ReviewController: {
     /**
      * GET /api/review/history
      *
-     * Returns ALL tracked problems for the authenticated user (no due-date filter).
-     * The frontend handles filtering/sorting client-side.
+     * Returns the authenticated user's tracked problems (no due-date filter),
+     * ordered by dueDate ASC.
+     *
+     * Pagination is **opt-in and backward-compatible** (PERFORMANCE.md M6):
+     *   • No `limit` query param → returns the full list, exactly as before.
+     *   • `?limit=N` (optionally `&offset=M`) → returns one page plus
+     *     `limit`, `offset`, and `hasMore` metadata so the client can page.
+     * In both modes `count` is the user's total tracked-problem count.
      */
     getHistory(req: Request, res: Response): Promise<void>;
 };

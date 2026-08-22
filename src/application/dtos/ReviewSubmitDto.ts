@@ -45,10 +45,13 @@ export interface ReviewSubmitResponseDto {
   data: {
     problemId: string;
     problemTitle: string;
+    topicTags: string[];
     newInterval: number;
     newEasinessFactor: number;
     nextDueDate: string; // ISO 8601 string
     repetitions: number;
     qualityScore: number;
+    /** True if the problem was already due when this review was submitted (pre-update). Drives streak credit. */
+    wasDue: boolean;
   };
 }

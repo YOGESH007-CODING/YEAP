@@ -42,6 +42,7 @@ export interface ReportResponseDto {
         problemId: string;
         problemSlug: string;
         problemTitle: string;
+        topicTags: string[];
         difficulty: string;
         newInterval: number;
         newEasinessFactor: number;

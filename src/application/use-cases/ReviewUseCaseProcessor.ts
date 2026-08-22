@@ -85,10 +85,15 @@ export class ReviewUseCaseProcessor {
     //    Uses SELECT ... FOR UPDATE inside a transaction to prevent
     //    concurrent submits from computing on stale state (lost-update race).
     const now = new Date();
+    // Capture whether the problem was already due *before* this update, straight
+    // from the locked row — so the caller doesn't need a separate pre-read to
+    // decide streak credit (see PERFORMANCE.md E5).
+    let wasDue = false;
     const updatedProgress = await this.progressRepo.atomicFindAndUpdate(
       userId,
       dto.problemId,
       (current) => {
+        wasDue = current.dueDate <= now;
         const currentState = {
           repetitions: current.repetitions,
           easinessFactor: current.easinessFactor,
@@ -114,11 +119,13 @@ export class ReviewUseCaseProcessor {
       data: {
         problemId: problem.id,
         problemTitle: problem.title,
+        topicTags: problem.topicTags,
         newInterval: updatedProgress.intervalDays,
         newEasinessFactor: updatedProgress.easinessFactor,
         nextDueDate: updatedProgress.dueDate.toISOString(),
         repetitions: updatedProgress.repetitions,
         qualityScore: dto.qualityScore,
+        wasDue,
       },
     };
   }

@@ -83,6 +83,7 @@ export class ReportProblemUseCase {
         problemId: problem.id,
         problemSlug: problem.slug,
         problemTitle: problem.title,
+        topicTags: problem.topicTags,
         difficulty: problem.difficulty,
         newInterval: updatedProgress.intervalDays,
         newEasinessFactor: updatedProgress.easinessFactor,

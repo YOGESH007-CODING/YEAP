@@ -14,7 +14,12 @@ export declare class PrismaProblemProgressRepository implements IProblemProgress
     update(id: string, data: UpdateProgressDto): Promise<ProblemProgressDto>;
     findDueByUser(userId: string, limit: number): Promise<DueProgressWithProblem[]>;
     findAllDue(perUserLimit: number): Promise<DueProgressWithProblem[]>;
+    countGroupedByUser(userIds: string[]): Promise<Map<string, number>>;
+    countDueGroupedByUser(): Promise<Map<string, number>>;
+    createManyForUser(userId: string, problemIds: string[]): Promise<number>;
     atomicFindAndUpdate(userId: string, problemId: string, updater: (current: ProblemProgressDto) => UpdateProgressDto): Promise<ProblemProgressDto>;
     findAllByUser(userId: string): Promise<DueProgressWithProblem[]>;
+    findPageByUser(userId: string, limit: number, offset: number): Promise<DueProgressWithProblem[]>;
+    countByUser(userId: string): Promise<number>;
 }
 //# sourceMappingURL=PrismaProblemProgressRepository.d.ts.map

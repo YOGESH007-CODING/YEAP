@@ -38,6 +38,15 @@ export class PrismaUserRepository implements IUserRepository {
     return users.map(toDto);
   }
 
+  async findActive(): Promise<UserDto[]> {
+    // Excludes soft-deleted accounts. Backed by the @@index([deletedAt]).
+    const users = await this.db.user.findMany({
+      where: { deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+    return users.map(toDto);
+  }
+
   async findById(id: string): Promise<UserDto | null> {
     const user = await this.db.user.findUnique({ where: { id } });
     return user ? toDto(user) : null;
