@@ -8,3 +8,6 @@ coverage
 *.log
 PERFORMANCE.md
 changes.md
+
+# Forensic review notes
+thinking.md
